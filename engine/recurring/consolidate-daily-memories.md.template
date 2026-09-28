@@ -1,0 +1,220 @@
+# Consolidate Daily Memories
+
+You are {{PERSONA_NAME}} running a scheduled job: **Daily Consolidation (lightweight)** (1:00 AM daily). Turn yesterday's raw sessions into a clean memory file. No deep reflection, no long-term memory updates, no creations — those happen in the weekly deep consolidation (Sunday nights). Two jobs tonight: (1) consolidate yesterday's sessions, (2) read {{USER_NAME}}'s personal journal.
+
+<!--
+TODO(consolidation-single-source): the engine now ships a `mineru memory
+consolidate --date <YYYY-MM-DD>` verb that IS the canonical distillation
+implementation (headless-Claude backend, single distillation prompt at
+`mineru_cli/memory_ops/prompts/consolidate_distiller.md`). This template
+should be refactored to CALL that verb for the distillation step, so
+this recurring job and the CLI share ONE implementation. Sketch:
+  - Shell pre-work stays (memory dump, extract-cc-sessions, journal load).
+  - Distillation step becomes: `mineru memory consolidate --date "$YESTERDAY"`.
+  - Shell post-work stays (auto-tag, tag-index rebuild, cleanup, git commit),
+    or moves into the verb over time.
+Until that refactor lands, Step 3 below defers to the canonical prompt so
+the distillation RULES have exactly one source of truth.
+-->
+
+
+## Step 1: Load Memory Context (MANDATORY)
+
+Before anything else, load the full memory dump for context. This is **required** - read the entire output without truncation or skimming.
+
+```bash
+MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp)
+```
+
+Read the entire file at `$MEMORY_DUMP`. It may be large; that's expected. This gives you full context on {{PERSONA_NAME}}'s memories and {{USER_NAME}}'s world:
+- Who people are (household, family, friends)
+- Active projects and priorities
+- What matters and what's noise
+
+**Do not skip or skim this step.** The memory context helps you make intelligent consolidation decisions.
+
+## Step 2: Find Session Files
+
+This job runs at 1:00 AM, so we're consolidating **yesterday's** sessions.
+
+Determine the target date: if a date was provided at the end of this prompt (e.g. "The target date for this consolidation run is 2026-03-18"), use that. Otherwise, compute yesterday:
+
+```bash
+YESTERDAY=$(date -v-1d '+%Y-%m-%d')
+python3 {{MINERU_HOME}}/scripts/extract-cc-sessions.py --since "$YESTERDAY"
+```
+
+**If nothing new was extracted** — the script's final line is `Extracted 0 session(s)` (or every session line says `Skip ... (already extracted)`), or stderr says `No CC project dirs found`: no sessions to consolidate. Skip to Step 4 (there may still be a journal entry, and a Telegram file to fold in per below). The script never prints a "NO_FILES" sentinel — judge by the lines above.
+
+**If files are listed**: Read each file, then proceed to Step 3.
+
+**Also read the Telegram conversation file for yesterday, if it exists.** The Landline daemon writes `memory/daily/${YESTERDAY}_telegram.md` separately from CC sessions — it captures every Telegram exchange ({{USER_NAME}} ↔ {{PERSONA_NAME}}) for the day and is deleted by Step 7's cleanup. Read it now and fold its substance into the consolidated file in Step 3 (as its own section or merged into existing topics), otherwise that day's conversation is lost permanently:
+
+```bash
+[ -f "memory/daily/${YESTERDAY}_telegram.md" ] && cat "memory/daily/${YESTERDAY}_telegram.md"
+```
+
+If the file is absent (no Telegram activity that day), just proceed.
+
+## Step 3: Consolidate and Clean
+
+Create a **single consolidated memory file** from all sessions.
+
+**Follow the canonical distillation rules that the engine's `mineru memory consolidate` verb also uses.** They live in ONE file so the CLI and this recurring job never drift apart. Read them now:
+
+```bash
+cat {{MINERU_HOME}}/engine/../mineru_cli/memory_ops/prompts/consolidate_distiller.md
+```
+
+That file is the source of truth for preserve/remove rules, the cardinal "distill phrasing, never substance" rule, and the general output shape. This job then layers a few framework-specific extensions on top:
+
+- **Also drop** the noise this job's inputs carry: phone numbers in logging metadata, sender IDs, message metadata, system messages, webhook payloads, raw JSON dumps, and verbose tool output from CC session transcripts.
+- **Also add** the framework-specific format shape defined in Step 6 below (YAML frontmatter tags, dedicated Journal section, Artifacts and Open Items sections).
+
+## Step 4: Read {{USER_NAME}}'s Personal Journal
+
+{{USER_NAME}}'s Apple Notes "Daily Journals" are pre-exported to plain text files before this job runs. This avoids AppleScript/TCC permission issues (Claude Code's binary changes every update, losing macOS automation permissions each time).
+
+**Read from:** `journal_exports/`
+
+1. Check the manifest: `journal_exports/_index.json` — lists all exported entries with names and dates.
+2. Find yesterday's entry by name (journal entries are typically titled by date, e.g., "March 27, 2026").
+3. Read the `.txt` file: `journal_exports/<entry-title>.txt`
+
+```bash
+# See what's available
+cat journal_exports/_index.json
+# Read a specific entry
+cat "journal_exports/March 27, 2026.txt"
+```
+
+**What to read:**
+- **Yesterday's entry / entries**: Always read this. Incorporate fully into the consolidated daily memory as a dedicated section (e.g., `## {{USER_NAME}}'s Journal`).
+- **Recent entries (last few days)**: Read a couple for context - ongoing threads, evolving thoughts, anything that should update long-term memory files but may have been missed by earlier consolidation runs. Use these for context only; don't re-include them in yesterday's file.
+
+{{USER_NAME}}'s journal is personal, reflective writing - preserve his voice and the substance of what he's thinking about. This is first-person context straight from him, so treat it as high-signal.
+
+**If no entries exist or the export directory is empty**: That's fine, just proceed. The export may have failed if Notes.app wasn't running.
+
+## Step 5: Auto-Tag the Consolidated Content
+
+Before writing the file, generate tags for the content - keywords, phrases, concepts, people, projects, decisions, or themes worth indexing.
+
+**Guidelines:**
+- 5-20 tags typical, be comprehensive but not exhaustive
+- Include specific names (people, places, companies, projects)
+- Include abstract concepts if notable (e.g., "job change", "decision made", "milestone")
+- Mood/sentiment only if it naturally fits - don't force it
+- Natural phrasing ("job search" not "job_search")
+- Lowercase preferred
+
+## Step 6: Write Output
+
+Write the consolidated file with YAML frontmatter tags to:
+
+```bash
+memory/daily/$YESTERDAY.md
+```
+
+**Format:**
+
+```markdown
+---
+tags:
+  - tag one
+  - tag two
+  - person name
+  - project name
+---
+
+# Daily Memory: YYYY-MM-DD
+
+_Consolidated from N sessions + journal_
+
+---
+
+## [Topic/Theme 1]
+
+[Clean summary of what happened]
+- Key decisions and reasoning
+- Work accomplished
+- Files created/modified
+
+## [Topic/Theme 2]
+
+...
+
+## {{USER_NAME}}'s Journal
+
+[Preserved substance from the Apple Notes journal entry, if one existed]
+
+---
+
+## Artifacts
+
+- `path/to/file` - Brief description
+
+## Open Items
+
+- [ ] Todos or follow-ups mentioned
+
+## Notes
+
+- Important context worth remembering
+```
+
+## Step 7: Clean Up Session Files
+
+After successfully writing the consolidated file:
+
+**1. Trash the individual session files:**
+```bash
+trash memory/daily/${YESTERDAY}_*.md
+```
+
+**1b. Sweep stragglers from earlier days.** Raw `_`-files can escape step 1 when a session's start-time date differs from the night it was extracted (e.g. a 1 AM session extracted during the previous day's run), or when a night's job failed entirely. Trash a straggler ONLY if its day's consolidated file exists:
+```bash
+TODAY=$(date '+%Y-%m-%d')
+for f in memory/daily/*_*.md; do
+  d=$(basename "$f" | sed 's/_.*//')
+  [[ "$d" < "$TODAY" ]] && [ -f "memory/daily/$d.md" ] && trash "$f"
+done
+```
+Days with NO consolidated file are the only surviving record of those sessions — leave those files alone and flag them in the report instead.
+
+**2. Remove the temporary memory dump:**
+```bash
+# SAFETY (incident 2026-08-05): $MEMORY_DUMP is EMPTY in a fresh shell — env vars do
+# NOT persist across separate tool calls — and `trash ""` trashes the CURRENT directory,
+# i.e. the whole {{MINERU_HOME}} workspace. Guard so only a real temp file is ever trashed.
+[ -n "$MEMORY_DUMP" ] && [ -f "$MEMORY_DUMP" ] && trash "$MEMORY_DUMP" || echo "cleanup skipped: MEMORY_DUMP unset/not-a-file"
+```
+
+**Only clean up after confirming the consolidated file was written successfully.**
+
+## Step 8: Rebuild Tags Index
+
+The tag index (`memory/tags-index.json`) is owned by `msearch`: its `load_or_build` rebuilds and writes the file whenever the on-disk cache is missing or older than `CACHE_TTL_SECONDS` (5 min). After consolidation adds new daily files with new tags, force an immediate rebuild by deleting the cache and running any `msearch` command:
+
+```bash
+trash {{MINERU_HOME}}/memory/tags-index.json 2>/dev/null || true
+{{MINERU_HOME}}/bin/msearch tags > /dev/null
+```
+
+This rescans the **full `memory/` tree** plus `reports/*.md` (msearch indexes the whole tree as of July 2026 — not just `daily/`), extracts frontmatter tags, and rewrites `memory/tags-index.json` with both forward (tag → files) and reverse (file → tags) mappings.
+
+## Step 9: Report
+
+Reply briefly: how many sessions, journal entry (yes/no), main topics, tags generated, any notable items.
+
+Example: "Consolidated 3 sessions + journal for 2026-05-15: Invisalign setup, prompt alignment, family naming tradition. Tagged with 12 keywords. 2 open items tracked."
+
+## Step 10: Git Commit
+
+Final step — commit and push all workspace changes:
+
+```bash
+bash {{MINERU_HOME}}/scripts/git-backup-workspace.sh "$YESTERDAY"
+```
+
+This ensures the workspace is backed up after each day's consolidation.

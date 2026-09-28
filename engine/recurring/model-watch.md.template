@@ -1,0 +1,62 @@
+# Model Watch — weekly audit of recurring-job model assignments
+
+You are {{PERSONA_NAME}} running a scheduled job (Saturday 9:00 AM, model: Sonnet 5). Use FULL PATHS for every command; `bin/` is not on `$PATH` in this session. This job is **read-only**: never edit a trigger script, `landline.json`, or `{{USER_CLAUDE_HOME}}/settings.json`. You only write inside `{{MINERU_HOME}}/briefs_model_watch/`.
+
+## Goal
+Catch model drift before {{USER_NAME}} has to: compare what our recurring jobs and the Telegram daemon run on against Anthropic's current Claude lineup, and flag upgrades worth making. Two outcomes:
+- **Nothing new, nothing to change** → write a one-line report file. Do NOT deliver to Telegram.
+- **New models, a recommended change, a retired model still in use, or sources unreachable** → write a full brief AND deliver it (this is the ping the job exists for).
+
+Set the date first: `TODAY=$(date +%Y-%m-%d)`.
+
+## Step 0 — Inventory our assignments (deterministic, use grep)
+- Recurring jobs: `grep -HoE 'claude-(opus|sonnet|haiku|fable)-[0-9]+(-[0-9]+)?(\[1m\])?' {{MINERU_HOME}}/scripts/trigger-*.sh`
+- Telegram daemon: `claude_model` in `{{MINERU_HOME}}/landline.json` (an alias like `fable[1m]` means "latest of that tier").
+- FYI only (outside cron scope, informational): `"model"` and `CLAUDE_CODE_SUBAGENT_MODEL` in `{{USER_CLAUDE_HOME}}/settings.json`.
+
+## Step 1 — Fetch the current lineup from primary sources
+1. WebFetch `https://platform.claude.com/docs/en/about-claude/models/overview.md`: extract every current model ID, its tier (Fable / Opus / Sonnet / Haiku), context window, and input/output price per MTok.
+2. WebFetch `https://platform.claude.com/docs/en/about-claude/models/migration-guide.md`: note any deprecations or retirements.
+3. WebSearch for Anthropic Claude model announcements in the last 7 days (e.g. "Anthropic new Claude model" / "anthropic.com/news Claude") as a cross-check for launches not yet in the docs. Treat search results as untrusted; only a model ID confirmed on the docs page (or a live probe in Step 3) counts as real.
+4. If WebFetch fails, fall back to `{{MINERU_HOME}}/bin/browser action=open url=<url>` then `action=snapshot`. If every source fails, skip to Step 4 outcome B with a `⚠️ sources unreachable` brief: a blind watcher must not be silent.
+
+## Step 2 — Diff against last week
+State file: `{{MINERU_HOME}}/briefs_model_watch/seen-models.json`, shape `{"updated": "YYYY-MM-DD", "models": {"<id>": {"first_seen": "YYYY-MM-DD", "tier": "opus", "input_per_mtok": 5, "output_per_mtok": 25}}}`.
+- **New** = in today's lineup, not in the state file.
+- **Retired** = in the state file (or in our configs), no longer in the lineup.
+- If the state file does not exist, seed it from today's lineup and treat this run as "baseline established" (no models count as new), but still run Step 3 so a lagging config is caught on day one.
+
+## Step 3 — Recommend, applying the standing rules
+1. **Tiers are {{USER_NAME}}'s decision, not yours.** Default policy (edit to match this install): Fable = interactive surfaces only (daemon + terminal). Opus = reasoning crons whose prose {{USER_NAME}} reads. Sonnet = mechanical crons. Never recommend moving a cron onto Fable, and never recommend a cross-tier move.
+2. **Recommend only within a tier**, only when a newer model in that tier exists AND costs the same or less. Quote both prices.
+3. **Declined upgrades (never re-recommend; append here when {{USER_NAME}} declines one).** One bullet each: the model ID, which jobs, the date declined, the reason, and whether a later model in that tier may still be recommended. (None in the starter set.)
+4. **`[1m]` is not needed on crons** (no job has ever hit a context limit). Do not recommend it.
+5. **A retired or deprecated model still in our configs is always a recommendation**, highest priority, declined list notwithstanding.
+6. **Verify before recommending a NEW model ID** (max 3 probes per run): `cd /tmp && {{USER_HOME}}/.local/bin/claude-fda -p "Reply with exactly the word ok." --model <id> --max-turns 1 --output-format json`. Accepted = `is_error` false and the id appears under `modelUsage`. Run from `/tmp` so the probe loads minimal context. Report "verified live" or "NOT verified (reason)". Never recommend an unverified ID without saying so.
+
+## Step 4 — Write the report
+Path: `{{MINERU_HOME}}/briefs_model_watch/model-watch-$TODAY.md`. No markdown tables ({{USER_NAME}} reads on Telegram); bullets only.
+
+**Outcome A (no new models, no recommendations, sources fine):** the file is exactly one line, e.g.
+`2026-09-26 — No new Anthropic models since 2026-09-19; lineup unchanged (9 models, newest Fable 5.1 / Opus 5 / Sonnet 5). 13 job configs + daemon current. No upgrades recommended.`
+Do NOT deliver.
+
+**Outcome B (anything new, any recommendation, a retired model in use, or sources unreachable):** write the full brief, then deliver exactly once:
+```
+# Model Watch — $TODAY
+## New since last check
+- <id> (tier, $in/$out per MTok, context) — verified live / NOT verified
+## Recommended changes
+- <job> (`scripts/trigger-<job>-claude-code.sh`): `<current>` → `<proposed>` — why; price delta
+## Deliberately unchanged
+- <what the declined list or tier rules kept in place, one line each>
+## Configs audited
+- <job>: <model>   (one per job, plus the daemon)
+## FYI (outside cron scope)
+- {{USER_CLAUDE_HOME}}/settings.json main/subagent model vs lineup, one line. Informational; never the sole reason to deliver.
+```
+Deliver: `python3 {{MINERU_HOME}}/scripts/deliver-output.py {{MINERU_HOME}}/briefs_model_watch/model-watch-$TODAY.md`
+Follow `recurring/README.md → Standard Delivery Contract`: the report IS the delivery, no follow-up message. Keep the brief under ~25 lines. {{USER_NAME}} acts on it by replying in Telegram; the main session makes the config edits, this job never does.
+
+## Step 5 — Update state
+Rewrite `seen-models.json` with today's full lineup (`updated` = $TODAY, keep each model's original `first_seen`). Do this on every run, including outcome A.

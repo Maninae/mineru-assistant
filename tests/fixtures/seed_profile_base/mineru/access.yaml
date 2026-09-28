@@ -1,0 +1,5 @@
+# Per-profile access allowlist for the synthetic `mineru` seed (owner-only).
+
+owner: example
+authorized:
+  - {human: example, tier: owner}

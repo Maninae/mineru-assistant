@@ -1,0 +1,59 @@
+# MEMORY.md - Long-Term Memory
+
+Per-install stub. This file is your curated long-term memory: persistent patterns, distilled context, and lessons that matter across every future session. Daily logs live in `memory/daily/`; the deep structured detail lives under `memory/<topic>/`. This file is the distilled wisdom on top of them.
+
+The engine ships only the section shape below - fill it in the private overlay.
+
+---
+
+## Search This Memory
+
+MEMORY.md is the distilled summary; the details live in `memory/daily/` and the structured folders. Use `msearch` to search them - CLI reference in TOOLS.md, search discipline in AGENTS.md.
+
+---
+
+## Key Context
+
+Short, high-signal facts {{PERSONA_NAME}} needs to load fast at session start (location, partner, work, faith, standing interests). Point to structured `memory/` files for anything longer than a line or two.
+
+---
+
+## Household
+
+Ordered list of household members. Use `memory/people/` for detailed profiles.
+
+---
+
+## Pets
+
+Names, notable health signals, active conditions. Point to `memory/pets/` for the full record.
+
+---
+
+## People
+
+Key humans in {{USER_NAME}}'s life outside the household (family, close friends, colleagues). One-line each; details in `memory/people/`.
+
+---
+
+## Recurring Rhythms
+
+Weekly / monthly cadences that shape scheduling (worship, standing calls, medical appointments, recurring social events).
+
+---
+
+## Lessons Learned
+
+Behavioral and preference lessons worth carrying into every session. Corrections you want to persist. Anti-patterns to avoid.
+
+---
+
+## Active Projects & Reminders
+
+Live items with real state. Move dormant projects to `memory/projects/dormant.md`. Finished items are deleted, not archived here.
+
+---
+
+## Preferences
+
+Standing preferences that shape recurring output (TTS voice, weather focus, news rotation, delivery format).

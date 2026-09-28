@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Legacy `msearch` shim → `mineru memory ...` (with fall-through safety net).
+#
+# When the mineru CLI is healthy: `msearch tags` becomes `mineru memory tags`.
+# When mineru is missing / broken / hanging: exec the live original binary at
+# $MINERU_HOME/bin/msearch so cron, doctor, and skills that call
+# `msearch` on PATH keep working. See bin_shims/README.md for the full
+# rationale and _shim_lib.sh for the shared dispatch.
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./_shim_lib.sh
+source "$SCRIPT_DIR/_shim_lib.sh"
+
+MINERU_VERB=(memory)
+FALLBACK_BIN=${MINERU_HOME:-$HOME/.mineru}/bin/msearch
+
+shim_run "$@"

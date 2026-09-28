@@ -1,0 +1,83 @@
+#!/bin/bash
+# Monarch Money CLI wrapper
+# Usage: monarch <command> [args...]
+
+# Resolve symlinks to find the actual script directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+
+# Use the venv's Python directly
+PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+
+case "$1" in
+    login)
+        shift
+        "$PYTHON" "$SCRIPT_DIR/login.py" "$@"
+        ;;
+    accounts)
+        shift
+        "$PYTHON" "$SCRIPT_DIR/accounts.py" "$@"
+        ;;
+    transactions|txns)
+        shift
+        "$PYTHON" "$SCRIPT_DIR/transactions.py" "$@"
+        ;;
+    budgets)
+        shift
+        "$PYTHON" "$SCRIPT_DIR/budgets.py" "$@"
+        ;;
+    cashflow)
+        shift
+        "$PYTHON" "$SCRIPT_DIR/cashflow.py" "$@"
+        ;;
+    holdings)
+        shift
+        "$PYTHON" "$SCRIPT_DIR/holdings.py" "$@"
+        ;;
+    networth|nw)
+        shift
+        "$PYTHON" "$SCRIPT_DIR/networth.py" "$@"
+        ;;
+    recurring|subscriptions|subs)
+        shift
+        "$PYTHON" "$SCRIPT_DIR/recurring.py" "$@"
+        ;;
+    status)
+        if [ -f ~/.monarch/session.json ]; then
+            echo "✓ Authenticated (session exists)"
+        else
+            echo "✗ Not authenticated"
+            echo "Run: monarch login"
+        fi
+        ;;
+    help|--help|-h|"")
+        echo "Monarch Money CLI"
+        echo ""
+        echo "Usage: monarch <command> [options]"
+        echo ""
+        echo "Commands:"
+        echo "  login        Login to Monarch Money (interactive)"
+        echo "  status       Check authentication status"
+        echo ""
+        echo "  accounts     List accounts [--format table]"
+        echo "  transactions List transactions [--limit N] [--search Q] [--account NAME] [--category NAME]"
+        echo "  budgets      List budgets [--start DATE] [--end DATE] [--format table]"
+        echo "  cashflow     Get cashflow summary [--start DATE] [--end DATE] [--format table]"
+        echo ""
+        echo "  holdings     List investment holdings [--account NAME] [--format table]"
+        echo "  networth     Net worth over time [--start DATE] [--end DATE] [--format table]"
+        echo "  recurring    List subscriptions and recurring charges [--format table]"
+        echo ""
+        echo "Aliases: txns = transactions, nw = networth, subs = recurring"
+        ;;
+    *)
+        echo "Unknown command: $1"
+        echo "Run 'monarch help' for usage."
+        exit 1
+        ;;
+esac

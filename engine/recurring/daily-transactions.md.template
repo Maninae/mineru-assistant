@@ -1,0 +1,136 @@
+# Weekly Transaction Review
+
+_(File/plist/dir keep the `daily-transactions` name for stability; the job is weekly — see the schedule table in `prompts/TECHNICAL.md`.)_
+
+**When:** Thursday at 10 PM (local time, {{USER_TIMEZONE}})
+**Purpose:** Weekly recap of the most-recently-completed Mon–Sun week. Running Thursday (4 days after that Sunday closes) gives every charge in the week ≥4 days to post, so nothing slips through the credit-card settlement lag.
+
+---
+
+## Instructions
+
+This is a **lightweight** weekly check. Keep it brief — just transactions from the just-completed Mon–Sun week and any flags.
+
+### 1. Get Date Range (local time) — the most-recent complete Mon–Sun week
+
+Scan the **completed** week (Monday–Sunday) that ended last Sunday. The job runs Thursday, so that Sunday is 4 days back and every charge in the week has had ≥4 days to post (credit-card charges take 2-4 days to settle, so a same-day pull always undercounts). All dates in **{{USER_TIMEZONE}}**.
+
+```bash
+# Window = last Monday .. last Sunday (the just-finished week)
+WEEK_END=$(TZ={{USER_TIMEZONE}} date -v-Sun +%Y-%m-%d)          # last Sunday
+WEEK_START=$(TZ={{USER_TIMEZONE}} date -v-Sun -v-6d +%Y-%m-%d)  # the Monday before it
+echo "Week: $WEEK_START (Mon) → $WEEK_END (Sun)"
+```
+
+### 2. Pull Recent Transactions
+
+```bash
+# Pull the week's transactions via your finance CLI ({{FINANCE_CLI_PRODUCT}}), using its date-range flags.
+# If your account list includes an automated-rebalance portfolio (a direct-index or
+# robo account that trades daily), filter it out so the noise doesn't drown out real
+# spending — add a jq account-name filter here. Example shape:
+{{MINERU_HOME}}/bin/{{FINANCE_CLI_BINARY_NAME}} transactions list --start $WEEK_START --end $WEEK_END --limit 500
+```
+
+If no transactions remain after any filtering, that's fine — just note it.
+
+### 3. Quick Analysis
+
+**Before flagging anything as unusual, check `financial-checkup.md` → "Known Charges & Learnings"** — the same rules apply here. Don't re-flag documented patterns that {{USER_NAME}} has already accounted for.
+
+Scan for:
+- **Unexpected charges** — anything {{USER_NAME}} wouldn't recognize
+- **Duplicate transactions** — same merchant/amount twice
+- **Large amounts** — anything over $200 worth mentioning
+- **Subscriptions renewing** — flag if it's a renewal day
+
+**Transfers: show them, don't filter them.** Transfers stay *visible* — they're a useful signal, not noise. Aggregators sometimes leave a self-transfer between {{USER_NAME}}'s own accounts as `Uncategorized` / needs-review (e.g. a brokerage↔checking move whose merchant descriptor reads `Tfr <BANK NAME>…`). List it like any other line; do NOT hide it, and do NOT invent a "net $X out" by pairing unrelated legs (a large brokerage outflow and a smaller deposit are usually two separate moves, not one). When a large amount is clearly a self-transfer per its descriptor, say so ("self-transfer, verify not fraud") rather than flagging it as mystery spending. Fixing the miscategorization is {{USER_NAME}}'s own upstream task in {{FINANCE_CLI_PRODUCT}}.
+
+### 4. Format (mobile-friendly)
+
+Keep it SHORT. Group by day. Example format:
+
+```
+📊 **Weekly Transactions — Feb 16–22**
+
+**8 transactions this week: $274.43**
+
+*Mon Feb 24*
+• Warehouse Club: $89.21 (groceries)
+• Starbucks: $8.50
+
+*Sun Feb 23*
+• Amazon: $24.72 (household)
+
+*Sat Feb 22*
+• Spotify: $5.00 (subscription)
+• Target: $43.00
+
+*Fri Feb 21*
+• Safeway: $67.00 (groceries)
+• Shell: $37.00 (gas)
+
+✅ Nothing unusual.
+```
+
+Or if something needs attention:
+
+```
+📊 **Weekly Transactions — Feb 16–22**
+
+**4 transactions this week: $890.00**
+
+*Mon Feb 24*
+• Apple: $799.00 ⚠️
+• Target: $43.00
+
+*Sun Feb 23*
+• Starbucks: $5.00
+• Warehouse Club: $43.00
+
+⚠️ **Flag:** Large Apple charge — expected?
+```
+
+### 5. Weekly Auth Watch (run before delivering)
+
+Several credentials expire silently; this weekly check converts them into a loud one-liner a month before the cliff. It lives here (not in the monthly financial checkup) because auth monitoring must stay weekly. Run these read-only checks:
+
+```bash
+# gog OAuth: dies ~4 months after re-auth (invalid_grant). Alert past 100 days.
+gog auth list --json | jq -r '.accounts[0].created_at'   # compare to today
+
+# Finance CLI session (feeds this very report) — use its auth-status verb.
+{{MINERU_HOME}}/bin/{{FINANCE_CLI_BINARY_NAME}} auth status --verify
+
+# Telegram bot token readable (Keychain unlocked)?
+security find-generic-password -a {{KEYCHAIN_ACCOUNT}} -s {{TELEGRAM_BOT_SERVICE}} -w >/dev/null 2>&1 && echo OK || echo LOCKED/MISSING
+
+# Add any other silently-expiring token this install relies on (a vehicle or
+# smart-home refresh token, say): its age check, alert threshold, and whether a
+# missing file is deliberate (then stay silent on absence).
+```
+
+If everything is fresh (gog < 100d, finance CLI authenticated, Keychain OK, any added checks under threshold): say nothing — green is silent. If anything is stale or failing, add one `🔑 Auth watch:` line to the TOP of the report naming the credential, its age, and the fix (gog: the gog-auth recovery skill; finance CLI: its `auth login` flow).
+
+---
+
+### 6. Save & Deliver
+
+Write the report to `briefs_financial/daily-YYYY-MM-DD.md` (today's local date), then deliver:
+
+```bash
+python3 {{MINERU_HOME}}/scripts/deliver-output.py \
+  {{MINERU_HOME}}/briefs_financial/daily-YYYY-MM-DD.md \
+  --imessage-keychain <second-recipient-keychain-service> \
+  --imessage-format household_finance
+```
+
+The `--imessage-*` pair is the **optional second-recipient arm**: it sends a reformatted iMessage copy to a household member who doesn't use Telegram. `--imessage-keychain` reads their number from a Keychain service you name (kept out of git); `--imessage-format household_finance` selects the per-merchant emoji map + compact day-grouped layout (see `lib/imessage_format.py`). The arm is non-fatal — a failure there never blocks the Telegram delivery. Drop both flags if the install has no second recipient. See `recurring/README.md` — delivery contract.
+
+---
+
+## Key Points
+
+- **Timezone:** Always use {{USER_TIMEZONE}} for date calculations
+- **Brevity:** 5-10 lines max. This isn't the weekly deep-dive.
+- **Only flag real issues:** Don't mention everything is fine unless it is

@@ -1,0 +1,482 @@
+#!/usr/bin/env python3
+"""
+browser — CLI wrapper for Mineru Browser Automation Server (port 9471).
+
+Accepts OpenClaw-style key=value arguments or a single JSON argument.
+
+Usage:
+    browser action=open targetUrl="https://example.com"
+    browser action=snapshot targetId=tab_abc123
+    browser action=act targetId=tab_abc123 ref=e1 kind=click
+    browser action=act targetId=tab_abc123 ref=e2 kind=type text="hello"
+    browser action=act targetId=tab_abc123 ref=e2 kind=type text="hello" humanize=true
+    browser action=act targetId=tab_abc123 ref=e3 kind=hover
+    browser action=screenshot targetId=tab_abc123 path=/tmp/shot.png
+    browser action=screenshot targetId=tab_abc123 path=/tmp/shot.png fullPage=true
+    browser action=screenshot targetId=tab_abc123 path=/tmp/mob.png device=iphone fullPage=true
+    browser action=open targetUrl="https://example.com" device=iphone       # phone viewport at open
+    browser action=open targetUrl="https://example.com" viewport='{"width":390,"height":844}'
+    browser action=close targetId=tab_abc123
+    browser action=navigate targetId=tab_abc123 url="https://other.com"
+    browser action=act targetId=tab_abc123 kind=scroll y=500
+    browser action=act targetId=tab_abc123 kind=scroll y=-500
+    browser action=wait targetId=tab_abc123 until=networkidle
+    browser action=upload targetId=tab_abc123 ref=e3 paths='["/tmp/file.pdf"]'
+    browser action=upload targetId=tab_abc123 ref=e4 paths='["/tmp/file.pdf"]' via_click=true
+    browser action=evaluate targetId=tab_abc123 expression="document.title"
+    browser action=evaluate targetId=tab_abc123 expression="([a,b]) => a + b" arg='[1, 2]'
+    browser action=status
+    browser action=stop
+    browser '{"action":"open","targetUrl":"https://example.com"}'
+
+The server auto-starts if not running (waits up to 10s for /health).
+
+Environment variables:
+    MINERU_BROWSER_HEADLESS=false   Show the browser window (default: true/headless)
+    MINERU_BROWSER_CDP=http://localhost:9222   Attach to existing Chrome via CDP
+"""
+
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from typing import Any, Dict, Optional
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+# Server port + PID file: read from the same env knobs the browser server
+# reads (browser/config.py::PORT, browser/config.py::PID_FILE). Defaults
+# match today's production values, so a plain `browser status` on a single-
+# profile machine works identically to before. A second profile on the
+# same Mac sets MINERU_BROWSER_PORT + MINERU_BROWSER_PID_FILE (and the
+# profile-specific PERSISTENT_PROFILE via MINERU_HOME) to run a fully
+# isolated browser server without colliding with the primary profile's
+# server on 9471. This closes the last cross-profile browser collision
+# documented in browser/CLAUDE.md ("would require unique PORT + PID_FILE +
+# PERSISTENT_PROFILE").
+_SERVER_PORT = int(os.environ.get("MINERU_BROWSER_PORT", "9471"))
+SERVER_URL = "http://127.0.0.1:%d" % _SERVER_PORT
+PID_FILE = os.environ.get(
+    "MINERU_BROWSER_PID_FILE", "/tmp/mineru-browser-server.pid"
+)
+SERVER_SCRIPT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "browser",
+    "server.py",
+)
+LOG_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "logs",
+    "browser-server",
+)
+
+# Per-boot bearer-token file — see browser/auth_token.py. Location is
+# `$MINERU_HOME/cache/browser-server.token`, mode 0600. Read at request
+# time (not import time) so a token rotation between CLI invocations is
+# picked up automatically. `MINERU_HOME` defaults to `~/.mineru`, mirroring
+# `browser/config.py::MINERU_HOME`.
+_MINERU_HOME_ENV = "MINERU_HOME"
+
+
+def _token_path():
+    # type: () -> str
+    """Return the bearer-token file path.
+
+    Resolved at call time so a per-invocation `MINERU_HOME=<tmp>` env
+    override takes effect (matches the server's resolution logic in
+    `browser/auth_token.py::token_path`).
+    """
+    home = os.environ.get(_MINERU_HOME_ENV) or os.path.expanduser("~/.mineru")
+    return os.path.join(home, "cache", "browser-server.token")
+
+
+def _read_bearer_token_or_none():
+    # type: () -> Optional[str]
+    """Return the current bearer token, or None if the file is absent/unreadable.
+
+    Absent = server not up yet (or pre-auth-hardening binary). The
+    caller decides whether to surface an error or auto-start the server
+    (which mints the file on boot).
+    """
+    path = _token_path()
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except (FileNotFoundError, PermissionError, OSError):
+        return None
+    tok = data.decode("utf-8", errors="replace").strip()
+    return tok or None
+
+
+def _read_bearer_token_or_die():
+    # type: () -> str
+    """Return the token or exit 1 with a clear error.
+
+    Used before firing a mutating POST — the server rejects the call
+    with 401 anyway, but failing loudly on the client side gives the
+    operator a copy-pasteable path to check.
+    """
+    tok = _read_bearer_token_or_none()
+    if tok is not None:
+        return tok
+    path = _token_path()
+    sys.stderr.write(
+        "ERROR: no browser-server bearer token at %s.\n"
+        "The server generates this file on startup (mode 0600). A missing\n"
+        "file usually means the server isn't running, or that a stale\n"
+        "server pre-dates the auth-hardening change.\n"
+        "Fix: restart the browser server (e.g. `browser action=stop` then\n"
+        "any command — the CLI auto-starts a fresh server).\n" % path
+    )
+    sys.exit(1)
+
+
+def _health(timeout=3, return_error=False):
+    # type: (float, bool) -> Optional[Dict[str, Any]]
+    """Fetch /health from the server.
+
+    If return_error is False (default), returns the status dict or None on any failure
+    (used to probe whether the server is up).
+
+    If return_error is True, returns the status dict on success, or an
+    ``{"error": ...}`` dict on failure (used to surface details to the caller).
+    """
+    try:
+        req = Request(SERVER_URL + "/health")
+        resp = urlopen(req, timeout=timeout)
+        return json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        if not return_error:
+            return None
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
+        return {"error": "HTTP %s: %s" % (e.code, body)}
+    except URLError as e:
+        if not return_error:
+            return None
+        return {"error": "Connection failed: %s" % e.reason}
+    except Exception as e:
+        if not return_error:
+            return None
+        return {"error": "Connection failed: %s" % e}
+
+
+def _check_health():
+    # type: () -> Optional[Dict[str, Any]]
+    """Check if server is reachable. Returns status dict or None."""
+    return _health(timeout=3, return_error=False)
+
+
+def _server_running():
+    # type: () -> bool
+    """Check if the server process is alive (via PID file + port check)."""
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE) as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)  # check if process exists
+            return True
+        except (OSError, ValueError):
+            pass
+    # Also try health endpoint directly (PID file might be missing)
+    return _check_health() is not None
+
+
+# The server needs `cloakbrowser` + `playwright_stealth`, which on this machine
+# live ONLY in homebrew Python 3.14 — NOT system /usr/bin/python3 (3.9). Because
+# this CLI's shebang is `#!/usr/bin/env python3`, `sys.executable` is whatever
+# `python3` resolved to for the caller (a launchd job, a stripped PATH, or a
+# sandbox can all land on system 3.9). Spawning the server with that interpreter
+# silently produces a server that 500s on every browser launch. So pick — and
+# validate — an interpreter that can actually import the deps before spawning.
+SERVER_PYTHON_DEPS = ("cloakbrowser", "playwright_stealth")
+
+
+def _can_import_server_deps(python_exe):
+    # type: (str) -> bool
+    """True if python_exe can import the stealth deps the server needs."""
+    try:
+        result = subprocess.run(
+            [python_exe, "-c", "import cloakbrowser, playwright_stealth"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _server_python():
+    # type: () -> str
+    """Pick a Python that can run the server. First candidate whose imports
+    validate wins: explicit override, homebrew, current interpreter, PATH."""
+    candidates = []
+    override = os.environ.get("MINERU_BROWSER_PYTHON")
+    if override:
+        candidates.append(override)
+    candidates.append("/opt/homebrew/bin/python3")
+    candidates.append(sys.executable)
+    path_python = shutil.which("python3")
+    if path_python:
+        candidates.append(path_python)
+
+    seen = set()
+    for exe in candidates:
+        if not exe or exe in seen:
+            continue
+        seen.add(exe)
+        if os.path.exists(exe) and _can_import_server_deps(exe):
+            return exe
+
+    # Nothing validated — return the best guess but warn loudly so the failure
+    # is diagnosable instead of a silent 500 on the first browser launch.
+    fallback = override or "/opt/homebrew/bin/python3"
+    sys.stderr.write(
+        "WARNING: no Python found with %s importable; falling back to %s. "
+        "Browser launches may fail with HTTP 500. Set MINERU_BROWSER_PYTHON "
+        "to a Python that has the stealth deps installed.\n"
+        % (" + ".join(SERVER_PYTHON_DEPS), fallback)
+    )
+    return fallback
+
+
+def _start_server():
+    # type: () -> bool
+    """Start the browser server in the background. Returns True if healthy within 10s."""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    stdout_log = os.path.join(LOG_DIR, "stdout.log")
+    stderr_log = os.path.join(LOG_DIR, "stderr.log")
+
+    with open(stdout_log, "a") as out, open(stderr_log, "a") as err:
+        subprocess.Popen(
+            [_server_python(), SERVER_SCRIPT],
+            stdout=out,
+            stderr=err,
+            start_new_session=True,
+        )
+
+    # Wait up to 10s for server to become healthy
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        status = _check_health()
+        if status is not None:
+            return True
+        time.sleep(0.5)
+
+    return False
+
+
+def _ensure_server():
+    # type: () -> None
+    """Make sure the server is running, starting it if needed."""
+    if _check_health() is not None:
+        return
+
+    sys.stderr.write("Browser server not running, starting...\n")
+
+    # Clean stale PID file
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE) as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)
+        except (OSError, ValueError):
+            try:
+                os.remove(PID_FILE)
+            except OSError:
+                pass
+
+    if not _start_server():
+        sys.stderr.write("ERROR: Failed to start browser server within 10s.\n")
+        sys.stderr.write("Check logs at: %s\n" % LOG_DIR)
+        sys.exit(1)
+
+    sys.stderr.write("Browser server started.\n")
+
+
+def _post_action(payload):
+    # type: (Dict[str, Any]) -> Dict[str, Any]
+    """POST a JSON action to the server and return the response.
+
+    Every POST carries `Authorization: Bearer <token>` — the per-boot
+    token the server minted at startup. See `_read_bearer_token_or_die`
+    for the error path when the token file is missing.
+    """
+    data = json.dumps(payload).encode("utf-8")
+    token = _read_bearer_token_or_die()
+    req = Request(
+        SERVER_URL + "/action",
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer %s" % token,
+        },
+    )
+    try:
+        resp = urlopen(req, timeout=60)
+        return json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
+        return {"error": "HTTP %s: %s" % (e.code, body)}
+    except URLError as e:
+        return {"error": "Connection failed: %s" % e.reason}
+
+
+def _get_health():
+    # type: () -> Dict[str, Any]
+    """GET /health from the server (returns an error dict on failure)."""
+    return _health(timeout=5, return_error=True)
+
+
+def _parse_value(s):
+    # type: (str) -> Any
+    """Parse a string value — try JSON (for bools, numbers, lists), else string."""
+    if s.lower() == "true":
+        return True
+    if s.lower() == "false":
+        return False
+    try:
+        return json.loads(s)
+    except (json.JSONDecodeError, ValueError):
+        return s
+
+
+def _parse_args(args):
+    # type: (list) -> Dict[str, Any]
+    """Parse CLI arguments into a request dict.
+
+    Supports:
+        key=value pairs:  action=open targetUrl="https://..."
+        Single JSON arg:  '{"action":"open","targetUrl":"..."}'
+    """
+    if len(args) == 1:
+        # Maybe it's a JSON blob
+        try:
+            parsed = json.loads(args[0])
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    result = {}  # type: Dict[str, Any]
+    for arg in args:
+        if "=" in arg:
+            key, _, val = arg.partition("=")
+            # Strip quotes from value (only if length >= 2 to avoid IndexError on empty)
+            if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+                val = val[1:-1]
+            result[key] = _parse_value(val)
+        else:
+            # Might be a bare action name
+            if "action" not in result:
+                result["action"] = arg
+    return result
+
+
+def _format_snapshot(data):
+    # type: (Dict[str, Any]) -> str
+    """Format a snapshot response for readable output."""
+    lines = []
+
+    if "error" in data:
+        return json.dumps(data, indent=2)
+
+    lines.append("Page: %s" % data.get("title", ""))
+    lines.append("URL:  %s" % data.get("url", ""))
+    lines.append("")
+
+    tree = data.get("tree", "")
+    if tree:
+        lines.append("--- Accessibility Tree ---")
+        lines.append(tree)
+        lines.append("")
+
+    refs = data.get("refs", {})
+    if refs:
+        lines.append("--- Interactive Elements (%d) ---" % len(refs))
+        for ref_id, info in sorted(refs.items(), key=lambda x: int(x[0][1:]) if x[0][1:].isdigit() else 0):
+            name = info.get("name", "")
+            role = info.get("role", "")
+            name_str = ' "%s"' % name if name else ""
+            lines.append("  %s: %s%s" % (ref_id, role, name_str))
+
+    note = data.get("note")
+    if note:
+        lines.append("")
+        lines.append("Note: %s" % note)
+
+    return "\n".join(lines)
+
+
+def _format_output(action, data):
+    # type: (str, Dict[str, Any]) -> str
+    """Format the response based on action type."""
+    if action == "snapshot" and "error" not in data:
+        return _format_snapshot(data)
+    return json.dumps(data, indent=2, ensure_ascii=False)
+
+
+def main():
+    # type: () -> None
+    if len(sys.argv) < 2:
+        sys.stderr.write(__doc__.strip() + "\n")
+        sys.exit(1)
+
+    payload = _parse_args(sys.argv[1:])
+
+    if not payload:
+        sys.stderr.write("ERROR: No arguments provided.\n")
+        sys.exit(1)
+
+    action = payload.get("action", "")
+    if not action:
+        sys.stderr.write("ERROR: Missing 'action' argument.\n")
+        sys.stderr.write("Valid actions: open, navigate, snapshot, act (click/type/select/check/hover/scroll), upload, screenshot, wait, close, status, stop\n")
+        sys.exit(1)
+
+    # Remove 'profile' key — kept for OpenClaw compat but not used
+    payload.pop("profile", None)
+
+    # Status can work even if server is down (shows that fact)
+    if action == "status":
+        status = _check_health()
+        if status is None:
+            print(json.dumps({"status": "not_running"}, indent=2))
+        else:
+            print(json.dumps(status, indent=2))
+        sys.exit(0)
+
+    # For stop, only attempt if server is reachable
+    if action == "stop":
+        if _check_health() is None:
+            print(json.dumps({"status": "not_running"}, indent=2))
+            sys.exit(0)
+        result = _post_action(payload)
+        print(json.dumps(result, indent=2))
+        sys.exit(0)
+
+    # All other actions need the server running
+    _ensure_server()
+
+    result = _post_action(payload)
+
+    if "error" in result:
+        print(_format_output(action, result))
+        sys.exit(1)
+
+    print(_format_output(action, result))
+
+
+if __name__ == "__main__":
+    main()

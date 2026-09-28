@@ -1,0 +1,13 @@
+{
+  "_comment": "Bundled default feed registry: the generic engine feeds. Loaded by app/config.py when the operator file (MINERU_FEEDS_FILE, default $MINERU_HOME/config/feeds.json) is absent or unreadable. The operator file REPLACES this list. dirs are relative to MINERU_HOME. group is the sidebar section; groups render in first-seen order.",
+  "feeds": [
+    {"id": "morning", "dirs": ["briefs_morning"], "display_name": "Morning", "emoji": "🌅", "accent": "sunrise", "group": "Daily"},
+    {"id": "news", "dirs": ["briefs_news"], "display_name": "News", "emoji": "📰", "accent": "slate", "group": "Daily"},
+    {"id": "financial", "dirs": ["briefs_financial"], "display_name": "Financial", "emoji": "💰", "accent": "gold", "group": "Daily"},
+    {"id": "curiosity", "dirs": ["briefs_curiosity"], "display_name": "Curiosity", "emoji": "💡", "accent": "violet", "group": "Daily"},
+    {"id": "inbox", "dirs": ["briefs_inbox"], "display_name": "Inbox Triage", "emoji": "📬", "accent": "amber", "group": "System"},
+    {"id": "prompts_alignment", "dirs": ["briefs_prompts_alignment"], "display_name": "Prompts Alignment", "emoji": "🧭", "accent": "teal", "group": "System"},
+    {"id": "doctor", "dirs": ["briefs_doctor"], "display_name": "Doctor", "emoji": "🩺", "accent": "rose", "group": "System"},
+    {"id": "system", "dirs": ["briefs_dedup", "briefs_consolidation", "briefs_imsg_group_members_updates"], "display_name": "System", "emoji": "⚙️", "accent": "muted", "group": "System"}
+  ]
+}

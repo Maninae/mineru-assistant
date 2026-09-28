@@ -1,0 +1,171 @@
+# Morning Brief
+
+Daily briefing for {{USER_NAME}}, delivered at 7 AM PT.
+
+## Guiding Principles
+
+**Your job is to give {{USER_NAME}} an accurate, holistic view of his day so he can start it well.** Incorrect entries are worse than missing ones.
+
+- **Think holistically.** Cross-reference calendar, messages, and email. If texts say a dinner was rescheduled but the calendar still shows the old date (or memory logs mention the old plan), trust the most recent source. Surface discrepancies — don't paper over them.
+- **Make connections.** If an email mentions a person {{USER_NAME}} is texting, or a calendar event relates to a message thread, connect the dots. Don't treat each section as an isolated silo.
+- **Never hallucinate.** If you haven't verified something with a tool call, don't state it as fact. It's completely fine to say "I didn't find details on this" or omit something uncertain. A shorter, accurate brief beats a longer one with fabricated entries.
+- **Accuracy over completeness.** Only report what you can confirm from actual tool results (calendar API, iMessage, Gmail). Do NOT carry forward claims from memory logs or daily notes without verifying them against current data — schedules change, plans get rescheduled, events get cancelled.
+- **When in doubt, check.** Use `msearch` for unfamiliar names or context. Read message threads fully, not just subject lines. If something seems off, investigate before reporting.
+
+## First Step: Get Current Date/Time
+
+Before anything else, run:
+```bash
+date '+%Y-%m-%d %H:%M:%S %Z (%A)'
+```
+Use this to compute all date offsets below (e.g., 7 days ago, 14 days ago). Do not assume the date from context — always check.
+
+## Context
+
+USER.md and MEMORY.md are already in your workspace context — don't re-read them. Use `msearch` for topic-specific context as needed.
+
+## Checklist
+
+### 1. 📅 Calendar (your personal calendar) — PRIORITY
+
+**Calendar ID:** `{{PERSONAL_CALENDAR_ID}}`
+
+Pull a 14-days-back + 14-days-forward window via the **MCP Calendar tool** (compute the ISO bounds from the date you got above):
+```
+mcp__claude_ai_Google_Calendar__list_events
+  calendarId: "{{PERSONAL_CALENDAR_ID}}"
+  startTime:  "YYYY-MM-DDT00:00:00"   # 14 days ago
+  endTime:    "YYYY-MM-DDT00:00:00"   # 14 days ahead
+  timeZone:   "America/Los_Angeles"
+  orderBy:    "startTime"
+  pageSize:   100
+# e.g., if today is March 26: startTime "2026-03-12T00:00:00", endTime "2026-04-09T00:00:00"
+```
+Events are returned under the `events` field as structured JSON. Read fields directly (no jq piping). If `nextPageToken` is present, page through with `pageToken`.
+
+**Fallback (only if the MCP call returns an auth error):** use the CLI, then note that {{USER_NAME}} should run `claude mcp login "claude.ai Google Calendar"`:
+```bash
+{{MINERU_HOME}}/bin/gog-firewall calendar events {{PERSONAL_CALENDAR_ID}} --from "YYYY-MM-DD" --to "YYYY-MM-DD" --json
+```
+(See `prompts/GCALENDAR.md` for the full reference.)
+
+**Two sections only:**
+
+**📅 Today** — Today's events with times. One line per event.
+
+**📅 Tomorrow** — Tomorrow's events only (not 72h). One line per event.
+
+**General:**
+- Include household/partner events if relevant (shared calendar)
+- **Only report events that actually appear on the calendar.** If memory/context mentions an event that's not on the calendar, either verify via messages or note it as unconfirmed.
+- No commentary like "light day" or "busy one" — let the list speak for itself.
+
+### 2. 🌤️ Weather
+
+- Run `bash {{MINERU_HOME}}/scripts/weather.sh` for {{USER_LOCATION}} forecast (has wttr.in → Open-Meteo fallback)
+- Output as emojis + temperature number on the header's second line (see Output Format)
+- No words describing conditions — emojis convey that
+
+### 3. 💬 Messages (iMessage) — BRIEF & ACTIONABLE
+
+**Commands:**
+```bash
+# Step 1: Get recently active chats
+{{MINERU_HOME}}/bin/imsg-firewall chats --max 30
+
+# Step 2: For each chat active in the last 7 days, pull messages by time window
+# Use --start (not --limit) to avoid pulling months of old messages from low-traffic chats
+{{MINERU_HOME}}/bin/imsg-firewall history --chat-id <CHAT_ID> --start "YYYY-MM-DDT00:00:00<UTC_OFFSET>" --json
+# where YYYY-MM-DD = 7 days before today
+# <UTC_OFFSET> = the local offset in ±HH:MM form ({{USER_TIMEZONE}}; get it from `date +%z` and insert the colon), or a trailing Z for UTC
+# e.g., if today is March 26 in a UTC-7 zone: --start "2026-03-19T00:00:00-07:00"
+# The CLI rejects a bare ISO date with no offset ("Invalid ISO8601 date"); always include the offset or a trailing Z.
+```
+
+**You must read threads thoroughly** — but the OUTPUT should be ultra-compressed:
+- **Only include items that need {{USER_NAME}}'s attention or action.** Skip resolved threads, well-wishes he's already acknowledged, FYI-only updates, and anything where {{USER_NAME}} already responded (`is_from_me: true`).
+- One line per person, two sentences max. What happened + what {{USER_NAME}} needs to do.
+- No backstory, no emotional color, no narrative. Just the headline.
+- If a thread discusses schedule changes, surface it — and correct the Calendar section if needed.
+- Skip people with nothing actionable (e.g. pocket texts, "ok" replies, congratulations already thanked).
+- Personality in the one-liner is fine — make words earn their place, but don't be clinical.
+
+### 4. 📬 Email
+
+**Read via gog-firewall** (per the GMAIL.md rule — the Gmail MCP connector is retired):
+- `{{MINERU_HOME}}/bin/gog-firewall gmail search "after:YYYY/MM/DD -label:CATEGORY_PROMOTIONS -label:CATEGORY_SOCIAL -label:CATEGORY_UPDATES" --max 50 --json` — where `YYYY/MM/DD` = 14 days before today (e.g. today March 26 → `after:2026/03/12`). Results are under `.threads[]`.
+- For any thread you need the full body of: `{{MINERU_HOME}}/bin/gog-firewall gmail thread get <threadId> --json`.
+- A redacted (`firewall_blocked`) unit on a long email is expected occasionally — skip that thread rather than fighting it.
+
+- **Only include emails that need a response or action.** Skip newsletters, promos, order confirmations, autopay notices, routine notifications.
+- **Skip all news-digest newsletters** reserved for the news brief (see the news-brief recipe for the sender list) — those are handled there
+- Routine/FYI emails (recruiter outreach, statements, shipping updates) go in the 🫧 Skippable line, not the main section.
+- Connect email context to calendar/messages where relevant
+
+### 5. 🔔 Context & Memory
+
+- `msearch` for relevant todos, deadlines, or context; optionally skim the last 2-3 `memory/daily/YYYY-MM-DD.md` files for what's been happening.
+- **⚠️ Memory logs may be stale.** They're consolidated overnight and may not reflect changes that happened later in the day. Always verify schedule-related claims from memory against the actual calendar and recent messages.
+
+### 6. 🔄 Reconciliation (MANDATORY — do this before writing output)
+
+Before finalizing your brief, review everything you've gathered:
+- Does anything in Messages contradict what's on the Calendar?
+- Did any memory log mention plans that have since been rescheduled or cancelled?
+- Are there events on the calendar that weren't in your memory context (newly added)?
+- Resolve all discrepancies. The brief should reflect the **current truth**, not stale plans.
+
+## Output Format
+
+{{USER_NAME}} is a new dad and busy. This brief should be scannable in 30 seconds. Every word must earn its place — but personality counts as earning its place. Be warm and concise, not clinical.
+
+### Structure
+
+```
+🌤️ **Day, Date** — short context (e.g. "Day 3 of the trip").
+[weather emojis] [temperature]°F
+
+📅 [event today with time]
+📅 **Tomorrow:** [event with time]
+
+💬 **Needs your attention:**
+- [emoji] **Name** — one-liner about what needs attention.
+- ⚠️[emoji] **Urgent thing** — why it's urgent.
+
+🫧 **Skippable:** one-liner listing FYI items (routine emails, non-urgent notifications).
+```
+
+### Weather line
+- Use emojis to convey conditions instead of words: ☀️ sun, 🌧️ rain, 🌬️ wind, ❄️ cold, 🌳☀️ nice park weather, 🌫️ fog, etc.
+- Include the temperature number. Don't write "sunny and cool" — the emojis say that.
+
+### Needs your attention
+- **Combines all streams** — iMessages, emails, reminders, deadlines. Anything needing action goes here regardless of source.
+- **Each item gets a fun, descriptive emoji** representing what it's about (🍼 baby stuff, 🗳️ voting, 💳 financial, 🍜 food, 🏥 medical, etc.). Pick diverse, colorful ones that make the list visually interesting.
+- **⚠️ prefix for urgent items only** — added before the topic emoji. Two tiers: normal and ⚠️ urgent. That's it.
+- One line per item, two sentences max. Personality welcome.
+
+### Skippable
+- 🫧 one-liner listing routine stuff {{USER_NAME}} can ignore (recruiter emails, statements, shipping updates, newsletters).
+- If there's nothing skippable, omit the section entirely.
+
+### Redundancy
+- Each piece of information appears ONCE, in its most relevant section.
+- No "Heads Up" summary footer — if it's important, it's already in Needs Your Attention.
+
+## ✨ Creations (Optional)
+
+After delivering the brief, read `creations/README.md` and see what you think. No obligation to write anything.
+
+## Preferences
+
+- **Calendar:** Always use your personal calendar (`{{PERSONAL_CALENDAR_ID}}`)
+- **Never** use {{USER_NAME}}'s primary/personal gmail calendar
+- **Location:** {{USER_LOCATION}}, CA
+- **Timezone:** America/Los_Angeles (PST/PDT)
+
+---
+
+## 🚀 Delivery
+
+Write the brief to `briefs_morning/morning-YYYY-MM-DD.md`, then `python3 {{MINERU_HOME}}/scripts/deliver-output.py {{MINERU_HOME}}/briefs_morning/morning-YYYY-MM-DD.md`. See `recurring/README.md` — delivery contract.

@@ -1,0 +1,325 @@
+/*
+ * Design tokens. All colors, gradients, and semantic surfaces flow through
+ * CSS custom properties so a theme switch is a data-attribute flip on <html>.
+ *
+ * Themes:
+ *   mail   — DEFAULT, flat Apple-Mail light aesthetic (white surfaces,
+ *            cool-gray sidebar, hairline dividers, strong blue selection).
+ *   forest — deep green wallpaper (legacy default)
+ *   ocean  — deep blues
+ *   warm   — light cream + amber
+ *   dark   — neutral charcoal
+ *
+ * :root[data-theme="X"] overrides win. The bare :root block is the fallback
+ * used when localStorage hasn't set a theme yet, and mirrors the mail values
+ * so first paint is the mail-client look even before theme.js runs.
+ */
+
+:root {
+  /* Fallback = mail theme values, so the first paint (before theme.js runs)
+     is the flat Apple-Mail look, not the legacy forest wallpaper. */
+  --wallpaper: none;
+  --wallpaper-accent: none;
+
+  --bg: #ffffff;
+  --sidebar-bg: #ececee;
+  --surface: #ffffff;
+  --surface-strong: #ffffff;
+  --surface-raised: #f2f2f5;
+  --surface-muted: rgba(0, 0, 0, 0.04);
+
+  --text-primary: #1d1d1f;
+  --text-secondary: #57575c;
+  /* AA (4.5:1) on white. Was #8e8e93 (3.26:1) — failed row-time/category and
+     any small text on --bg. #6e6e73 lands at 5.07:1 on white. Sidebar labels
+     use --sidebar-text-muted below because #6e6e73 misses 4.5:1 on #ececee. */
+  --text-muted: #6e6e73;
+  /* Muted-on-sidebar palette (#ececee). #6e6e73 sits at 4.21:1 on the sidebar,
+     which fails AA for small text — #57575c lands at 5.89:1. Used for the
+     feed-group section labels + the coordinator label/value. */
+  --sidebar-text-muted: #57575c;
+  --text-inverse: #ffffff;
+
+  --divider: rgba(0, 0, 0, 0.09);
+  --divider-strong: rgba(0, 0, 0, 0.18);
+
+  --accent: #2a62d9;
+  --accent-strong: #1e4bb0;
+  --accent-contrast: #ffffff;
+
+  /* Mail-row selection (the strong blue full-bleed) */
+  --selection-bg: #2a62d9;
+  --selection-text: #ffffff;
+  --selection-text-secondary: rgba(255, 255, 255, 0.85);
+
+  /* Sidebar unread counter (calm gray pill, not the emergency red). */
+  --badge-bg: #d1d1d6;
+  --badge-text: #3a3a3c;
+  --badge-calm: #d1d1d6;
+  --badge-calm-text: #3a3a3c;
+
+  /* Health dots + status pills. */
+  --status-fresh: #34c759;
+  --status-stale: #ff9f0a;
+  --status-failed: #ff3b30;
+  --status-neutral: #c7c7cc;
+
+  /* The little orange envelope glyph in the sidebar + row unread affordance. */
+  --unread-envelope: #e8890c;
+
+  /* Tag chips (needs-reply orange + info blue), for message subtitles.
+     tag-alert-text was #b45309 = 4.27:1 on #ffe9d3 — just under AA. #8a3a08
+     lands at 7.6:1 while keeping the burnt-orange feel. */
+  --tag-alert-bg: #ffe9d3;
+  --tag-alert-text: #8a3a08;
+  --tag-info-bg: #e2ecff;
+  --tag-info-text: #2a62d9;
+
+  /* Per-feed accent hues; the feed's `accent` key maps to one of these. */
+  --accent-sunrise: #ff9f43;
+  --accent-slate: #5c88b3;
+  --accent-gold: #d4a017;
+  --accent-violet: #8e5cd1;
+  --accent-ink: #4a4a4d;
+  --accent-amber: #d97706;
+  --accent-teal: #009688;
+  --accent-rose: #d64267;
+  --accent-muted: #8e8e93;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* Mail theme is flat: no card shadows in the list, keep a soft shadow for
+     drawers/pop-ups only. Legacy themes redefine these below. */
+  --shadow-soft: 0 8px 24px -10px rgba(0, 0, 0, 0.16);
+  --shadow-card: none;
+
+  --sidebar-width: 240px;
+  --list-width: 380px;
+  --tabbar-height: 60px;
+
+  /* Type scale — five roles, five sizes, enforced everywhere. */
+  --font-size-caption: 12px;  /* uppercase-tracked meta, timestamps, filename labels */
+  --font-size-body: 15px;     /* body copy, search input, TLDR text */
+  --font-size-card: 15px;     /* mail-row titles, tab labels (mail is tighter than legacy) */
+  --font-size-pane: 20px;     /* pane / list / reader header title */
+  --font-size-reader: 24px;   /* reader-title (bold letter head) */
+
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Tabbar background — used by mobile-tabbar on mobile shell. */
+  --tabbar-bg: #ffffff;
+
+  color-scheme: light;
+}
+
+/* Explicit mail theme (same values as the fallback :root, for
+   completeness/consistency when data-theme="mail" is set). */
+:root[data-theme="mail"] {
+  --wallpaper: none;
+  --wallpaper-accent: none;
+  --bg: #ffffff;
+  --sidebar-bg: #ececee;
+  --surface: #ffffff;
+  --surface-strong: #ffffff;
+  --surface-raised: #f2f2f5;
+  --surface-muted: rgba(0, 0, 0, 0.04);
+  --text-primary: #1d1d1f;
+  --text-secondary: #57575c;
+  /* Mail theme muted colors: AA-compliant. See :root block above for the full
+     rationale (row-time/category on white; feed-group labels + coordinator
+     lines on the #ececee sidebar). */
+  --text-muted: #6e6e73;
+  --sidebar-text-muted: #57575c;
+  --text-inverse: #ffffff;
+  --divider: rgba(0, 0, 0, 0.09);
+  --divider-strong: rgba(0, 0, 0, 0.18);
+  --accent: #2a62d9;
+  --accent-strong: #1e4bb0;
+  --accent-contrast: #ffffff;
+  --selection-bg: #2a62d9;
+  --selection-text: #ffffff;
+  --selection-text-secondary: rgba(255, 255, 255, 0.85);
+  --badge-calm: #d1d1d6;
+  --badge-calm-text: #3a3a3c;
+  --status-fresh: #34c759;
+  --status-stale: #ff9f0a;
+  --status-failed: #ff3b30;
+  --status-neutral: #c7c7cc;
+  --unread-envelope: #e8890c;
+  --tag-alert-bg: #ffe9d3;
+  --tag-alert-text: #8a3a08;
+  --tag-info-bg: #e2ecff;
+  --tag-info-text: #2a62d9;
+  --shadow-soft: 0 8px 24px -10px rgba(0, 0, 0, 0.16);
+  --shadow-card: none;
+  --tabbar-bg: #ffffff;
+  color-scheme: light;
+}
+
+:root[data-theme="forest"] {
+  --wallpaper: radial-gradient(circle at 20% 15%, #1c5240 0%, #0f2e26 45%, #061713 100%);
+  --wallpaper-accent: radial-gradient(circle at 80% 90%, rgba(72, 209, 152, 0.18) 0%, transparent 60%);
+  --bg: #0d211c;
+  --sidebar-bg: #0f2820;
+  --surface: rgba(20, 44, 36, 0.72);
+  --surface-strong: rgba(30, 60, 50, 0.9);
+  --surface-raised: rgba(38, 74, 62, 0.95);
+  --surface-muted: rgba(255, 255, 255, 0.04);
+  --text-primary: #f0efe6;
+  --text-secondary: rgba(240, 239, 230, 0.72);
+  --text-muted: rgba(240, 239, 230, 0.68);
+  --sidebar-text-muted: rgba(240, 239, 230, 0.78);
+  --text-inverse: #0d211c;
+  --divider: rgba(255, 255, 255, 0.08);
+  --divider-strong: rgba(255, 255, 255, 0.16);
+  --accent: #79e2b3;
+  --accent-strong: #4dcf94;
+  --accent-contrast: #061713;
+  --selection-bg: #48b586;
+  --selection-text: #061713;
+  --selection-text-secondary: rgba(6, 23, 19, 0.78);
+  --badge-calm: #48b586;
+  --badge-calm-text: #061713;
+  --status-fresh: #79e2b3;
+  --status-stale: #f2c265;
+  --status-failed: #ff8564;
+  --status-neutral: #9db7ae;
+  --unread-envelope: #f2c265;
+  --tag-alert-bg: rgba(242, 194, 101, 0.22);
+  --tag-alert-text: #f2c265;
+  --tag-info-bg: rgba(121, 226, 179, 0.18);
+  --tag-info-text: #79e2b3;
+  --shadow-soft: 0 12px 40px -18px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 6px 22px -12px rgba(0, 0, 0, 0.6);
+  --tabbar-bg: #0d211c;
+  color-scheme: dark;
+}
+
+:root[data-theme="ocean"] {
+  --wallpaper: radial-gradient(circle at 15% 20%, #12385e 0%, #061c31 55%, #020a17 100%);
+  --wallpaper-accent: radial-gradient(circle at 85% 85%, rgba(94, 168, 255, 0.16) 0%, transparent 65%);
+  --bg: #0b1c30;
+  --sidebar-bg: #0c2337;
+  --surface: rgba(15, 38, 66, 0.72);
+  --surface-strong: rgba(20, 50, 84, 0.9);
+  --surface-raised: rgba(30, 60, 98, 0.95);
+  --surface-muted: rgba(255, 255, 255, 0.04);
+  --text-primary: #eaf1f8;
+  --text-secondary: rgba(234, 241, 248, 0.72);
+  --text-muted: rgba(234, 241, 248, 0.68);
+  --sidebar-text-muted: rgba(234, 241, 248, 0.78);
+  --text-inverse: #061a2c;
+  --divider: rgba(255, 255, 255, 0.08);
+  --divider-strong: rgba(255, 255, 255, 0.16);
+  --accent: #6fb1ff;
+  --accent-strong: #4a94ea;
+  --accent-contrast: #061a2c;
+  --selection-bg: #4a94ea;
+  --selection-text: #061a2c;
+  --selection-text-secondary: rgba(6, 26, 44, 0.78);
+  --badge-calm: #48b586;
+  --badge-calm-text: #061a2c;
+  --status-fresh: #6fb1ff;
+  --status-stale: #f2c265;
+  --status-failed: #ff8564;
+  --status-neutral: #9db7ae;
+  --unread-envelope: #f2c265;
+  --tag-alert-bg: rgba(242, 194, 101, 0.22);
+  --tag-alert-text: #f2c265;
+  --tag-info-bg: rgba(111, 177, 255, 0.18);
+  --tag-info-text: #6fb1ff;
+  --shadow-soft: 0 12px 40px -18px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 6px 22px -12px rgba(0, 0, 0, 0.6);
+  --tabbar-bg: #0b1c30;
+  color-scheme: dark;
+}
+
+:root[data-theme="warm"] {
+  --wallpaper: radial-gradient(circle at 25% 20%, #ffe7c0 0%, #f4b874 45%, #d97a2b 100%);
+  --wallpaper-accent: radial-gradient(circle at 80% 90%, rgba(178, 63, 20, 0.18) 0%, transparent 65%);
+  --bg: #fcecd0;
+  --sidebar-bg: #f6dcac;
+  --surface: rgba(255, 240, 214, 0.9);
+  --surface-strong: rgba(255, 236, 204, 0.97);
+  --surface-raised: #fff8ea;
+  --surface-muted: rgba(140, 66, 20, 0.09);
+  --text-primary: #3a1e08;
+  --text-secondary: rgba(58, 30, 8, 0.78);
+  --text-muted: #7a4820;
+  --sidebar-text-muted: #5c3410;
+  --text-inverse: #fff9ea;
+  --divider: rgba(140, 66, 20, 0.22);
+  --divider-strong: rgba(140, 66, 20, 0.35);
+  --accent: #c2410c;
+  --accent-strong: #9a3412;
+  --accent-contrast: #fff5e6;
+  --selection-bg: #c2410c;
+  --selection-text: #fff5e6;
+  --selection-text-secondary: rgba(255, 245, 230, 0.85);
+  --badge-bg: #b13c14;
+  --badge-text: #fff5eb;
+  --badge-calm: #2f8862;
+  --badge-calm-text: #f5faf7;
+  --status-fresh: #4c8a55;
+  --status-stale: #c88a1c;
+  --status-failed: #b1290c;
+  --status-neutral: #8a5a2b;
+  --unread-envelope: #c88a1c;
+  --tag-alert-bg: rgba(200, 138, 28, 0.22);
+  --tag-alert-text: #7a4820;
+  --tag-info-bg: rgba(194, 65, 12, 0.14);
+  --tag-info-text: #c2410c;
+  --shadow-soft: 0 12px 40px -18px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 6px 22px -12px rgba(0, 0, 0, 0.35);
+  --tabbar-bg: #fff2d9;
+  --status-strip-tint: rgba(58, 30, 8, 0.62);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --wallpaper: linear-gradient(160deg, #1c1c22 0%, #101014 100%);
+  --wallpaper-accent: radial-gradient(circle at 80% 90%, rgba(120, 120, 130, 0.12) 0%, transparent 60%);
+  --bg: #14141a;
+  --sidebar-bg: #1a1a20;
+  --surface: rgba(28, 28, 34, 0.82);
+  --surface-strong: rgba(38, 38, 46, 0.94);
+  --surface-raised: rgba(48, 48, 58, 0.96);
+  --surface-muted: rgba(255, 255, 255, 0.04);
+  --text-primary: #eeeef1;
+  --text-secondary: rgba(238, 238, 241, 0.72);
+  --text-muted: rgba(238, 238, 241, 0.68);
+  --sidebar-text-muted: rgba(238, 238, 241, 0.78);
+  --text-inverse: #14141a;
+  --divider: rgba(255, 255, 255, 0.08);
+  --divider-strong: rgba(255, 255, 255, 0.16);
+  --accent: #8ea6ff;
+  --accent-strong: #7590eb;
+  --accent-contrast: #14141a;
+  --selection-bg: #4a68d9;
+  --selection-text: #ffffff;
+  --selection-text-secondary: rgba(255, 255, 255, 0.85);
+  --badge-calm: #48b586;
+  --badge-calm-text: #14141a;
+  --status-fresh: #34c759;
+  --status-stale: #ff9f0a;
+  --status-failed: #ff3b30;
+  --status-neutral: #7a7a80;
+  --unread-envelope: #ff9f0a;
+  --tag-alert-bg: rgba(255, 159, 10, 0.18);
+  --tag-alert-text: #ff9f0a;
+  --tag-info-bg: rgba(142, 166, 255, 0.18);
+  --tag-info-text: #8ea6ff;
+  --shadow-soft: 0 12px 40px -18px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 6px 22px -12px rgba(0, 0, 0, 0.6);
+  --tabbar-bg: #14141a;
+  color-scheme: dark;
+}
+
+/* Default status-strip tint is transparent (dark themes and mail need
+   nothing); warm overrides above. */
+:root { --status-strip-tint: transparent; }

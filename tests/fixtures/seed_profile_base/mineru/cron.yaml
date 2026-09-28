@@ -1,0 +1,345 @@
+# Cron schedule for the `mineru` profile — declarative source of truth for
+# `mineru cron install` (Phase 4). One entry per launchd plist under
+# ~/Library/LaunchAgents/com.mineru.*.plist (labels prefixed by
+# `profile.launchd_label_prefix`, currently `com.mineru`).
+#
+# Scope: 16 jobs — 12 LLM (Claude Code) + 4 plain-script. The daemon
+# plists (com.mineru.telegram-daemon, com.mineru.daemon-watchdog) are
+# INTENTIONALLY EXCLUDED per the Phase-4 cutover doc §7 LANDMINES:
+# the daemon lives out-of-tree in ~/Developer/claude-landline and
+# `mineru cron` must not touch it.
+#
+# Every field was cross-referenced against the actual live plist +
+# trigger script; any deviation is flagged with a `DIVERGENCE:` comment
+# so a reviewer can immediately see + judge the delta. This file is
+# purely declarative — nothing here executes on load.
+#
+# Placeholders `{today}` and `{yesterday}` inside `idempotency_marker`
+# / `expected_output_glob` are resolved by the runner at fire time
+# using system-TZ date arithmetic, matching the live
+# `date +%Y-%m-%d` / `date -v-1d '+%Y-%m-%d'` calls.
+#
+# Schedule syntax: 5-field cron string `MM HH DOM MON DOW` (DOW 0=Sun).
+# Multi-instance jobs (e.g. a 3x/week job on Mon/Wed/Fri and a 2x/week job on Tue/Fri) use a
+# YAML list of cron strings; the plist template renders these as a
+# `List[Dict]` `StartCalendarInterval`, one dict per cron string.
+
+defaults:
+  # Most LLM jobs run on Opus 4.6 or Sonnet 4.6; Opus is the safer
+  # default since a job that omits `model:` silently would rather get
+  # more capacity than less. Every LLM job below sets `model:`
+  # explicitly, so this default is a belt-and-braces value.
+  default_model: claude-opus-4-6
+  # Most plist TimeOut values in the wild are 1800 or 3600; 1800 is the
+  # more common floor.
+  default_timeout: 1800
+  # The default env matches the majority of the LLM plists (the trigger
+  # scripts run through /Users/example/.local/bin for bin_shims). Script
+  # jobs override this since they use a different PATH ordering (Homebrew
+  # first, no .local/bin in the leading position).
+  default_env:
+    PATH: /Users/example/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+    HOME: /Users/example
+  default_working_directory: /Users/example/.mineru
+
+jobs:
+
+  # --- 12 LLM jobs -----------------------------------------------------
+
+  - name: morning-brief
+    kind: llm
+    # Daily at 07:00 PT. plist StartCalendarInterval: Hour=7, Minute=0.
+    schedule: "0 7 * * *"
+    model: claude-opus-4-6
+    instruction: recurring/morning-brief.md
+    expected_output_glob: briefs_morning/morning-*.md
+    idempotency_marker: briefs_morning/morning-{today}.md
+    timeout_seconds: 3600
+    pre_steps:
+      # Pre-warm the firewall's Ollama qwen3:8b model in the BACKGROUND
+      # so the first Gmail screen of the day doesn't eat the 5 GB cold
+      # load inside the brief's critical path. Runs before CC; the live
+      # trigger script backgrounds this via `&` — the plist runner will
+      # do the same. `allow_fail: true` because a missing Ollama must
+      # not kill the brief (the firewall silently degrades to
+      # patterns-only screening).
+      - cmd:
+          - /usr/bin/curl
+          - -sS
+          - -m
+          - "120"
+          - http://localhost:11434/api/chat
+          - -d
+          - '{"model": "qwen3:8b", "messages": [{"role": "user", "content": "ok"}], "think": false, "keep_alive": "2h", "stream": false}'
+        allow_fail: true
+        comment: "Pre-warm Ollama qwen3:8b so the first Gmail firewall screen isn't cold."
+
+  - name: news-brief
+    kind: llm
+    # Daily at 11:00 PT. plist StartCalendarInterval: Hour=11, Minute=0.
+    schedule: "0 11 * * *"
+    model: claude-sonnet-4-6
+    instruction: recurring/news-brief.md
+    expected_output_glob: briefs_news/briefs/*.md
+    # DIVERGENCE: the live trigger script does NOT call idempotent_guard.
+    # Matching that (no marker) so a re-run at noon doesn't silently skip.
+    idempotency_marker: null
+    timeout_seconds: 3600
+
+  - name: curiosity-question
+    kind: llm
+    # Daily at 11:30 PT. plist StartCalendarInterval: Hour=11, Minute=30.
+    schedule: "30 11 * * *"
+    # Opus 4.8 per the live trigger; matches TECHNICAL.md's note that
+    # curiosity must reason hard + verify a gap is real before asking.
+    model: claude-opus-4-8
+    instruction: recurring/daily-curiosity-question.md
+    expected_output_glob: briefs_curiosity/question-*.md
+    idempotency_marker: briefs_curiosity/question-{today}.md
+    timeout_seconds: 1800
+
+  - name: memory-description
+    kind: llm
+    # Daily at 02:19 PT. plist StartCalendarInterval: Hour=2, Minute=19.
+    schedule: "19 2 * * *"
+    model: claude-sonnet-4-6
+    instruction: recurring/memory-description-maintenance.md
+    # LANDMINE (§7): memory-description edits memory frontmatter in
+    # place. There is no single brief file produced, so
+    # expected_output_glob MUST stay null — inventing one would fire a
+    # false failure alert on every run. Matches the live trigger script
+    # (`run_cc_job "memory-description" ... [NO expected-output arg]`).
+    expected_output_glob: null
+    idempotency_marker: null
+    timeout_seconds: 3600
+
+  - name: memory-dedup
+    kind: llm
+    # Sunday at 22:30 PT. plist StartCalendarInterval: Weekday=0,
+    # Hour=22, Minute=30. NOTE: the trigger-script comment says
+    # "1st, 11th, 21st at 10:30 PM" but the ACTUAL live plist fires
+    # weekly on Sunday — plist is authoritative here (matches
+    # TECHNICAL.md's "Sunday 10:30 PM (weekly)").
+    # DIVERGENCE: none — we follow the live plist, not the stale trigger comment.
+    schedule: "30 22 * * 0"
+    model: claude-opus-4-6
+    instruction: recurring/memory-dedup.md
+    expected_output_glob: briefs_dedup/dedup-*.md
+    idempotency_marker: null
+    # The live plist omits TimeOut, so launchd applies its default. We
+    # set the config default (1800s) explicitly for consistency; the
+    # plist materializer will emit a TimeOut key so behavior is
+    # deterministic instead of relying on launchd's implicit default.
+    timeout_seconds: 1800
+
+  - name: prompts-alignment
+    kind: llm
+    # Tue + Fri at 22:00 PT. Multi-instance plist StartCalendarInterval
+    # rendered as List[Dict] (Weekday=2 + Weekday=5, both Hour=22
+    # Minute=0). Encoded as a YAML list of cron strings.
+    schedule:
+      - "0 22 * * 2"
+      - "0 22 * * 5"
+    model: claude-opus-4-6
+    instruction: recurring/prompts-alignment.md
+    expected_output_glob: briefs_prompts_alignment/routine-*.md
+    idempotency_marker: null
+    # Live plist omits TimeOut — see memory-dedup note above.
+    timeout_seconds: 1800
+
+  - name: pet-summary
+    kind: llm
+    # Mon + Wed + Fri at 23:31 PT. Multi-instance plist
+    # StartCalendarInterval rendered as List[Dict] (Weekday=1, 3, 5;
+    # all Hour=23 Minute=31).
+    schedule:
+      - "31 23 * * 1"
+      - "31 23 * * 3"
+      - "31 23 * * 5"
+    model: claude-sonnet-4-6
+    instruction: recurring/pet-summary.md
+    expected_output_glob: briefs_pet/pet-*.md
+    idempotency_marker: null
+    timeout_seconds: 1800
+
+  - name: inbox-triage
+    kind: llm
+    # Sunday at 14:00 PT. plist StartCalendarInterval: Weekday=0,
+    # Hour=14, Minute=0.
+    schedule: "0 14 * * 0"
+    model: claude-sonnet-4-6
+    instruction: recurring/inbox-triage.md
+    expected_output_glob: briefs_inbox/triage-*.md
+    idempotency_marker: briefs_inbox/triage-{today}.md
+    timeout_seconds: 3600
+
+  - name: daily-transactions
+    kind: llm
+    # DIVERGENCE (naming only): despite the name, this job is WEEKLY,
+    # firing Thursday at 22:00 PT (plist StartCalendarInterval:
+    # Weekday=4, Hour=22, Minute=0). Preserving the historical name;
+    # TECHNICAL.md documents the "Thu 10:00 PM (weekly, despite the
+    # name)" quirk.
+    schedule: "0 22 * * 4"
+    model: claude-sonnet-4-6
+    instruction: recurring/daily-transactions.md
+    expected_output_glob: briefs_financial/daily-*.md
+    idempotency_marker: null
+    timeout_seconds: 1800
+
+  - name: financial-checkup
+    kind: llm
+    # Sunday at 21:00 PT. plist StartCalendarInterval: Weekday=0,
+    # Hour=21, Minute=0.
+    schedule: "0 21 * * 0"
+    model: claude-opus-4-6
+    instruction: recurring/financial-checkup.md
+    expected_output_glob: briefs_financial/weekly-*.md
+    idempotency_marker: null
+    timeout_seconds: 3600
+
+  - name: daily-consolidation
+    kind: llm
+    # Daily at 01:00 PT. plist StartCalendarInterval: Hour=1, Minute=0.
+    schedule: "0 1 * * *"
+    model: claude-sonnet-4-6
+    instruction: recurring/consolidate-daily-memories.md
+    # The consolidator produces yesterday's daily file at
+    # memory/daily/<YESTERDAY>.md — the live trigger checks that exact
+    # path both as its idempotency guard AND its post-run expected
+    # output. We record the same templated path for both, and the
+    # runner resolves `{yesterday}` at fire time.
+    expected_output_glob: memory/daily/{yesterday}.md
+    idempotency_marker: memory/daily/{yesterday}.md
+    # LANDMINE (§7): custom prompt + inline pre-steps. The live trigger
+    # cat's the recurring/*.md into a prompt string AND appends an
+    # "IMPORTANT: The target date for this consolidation run is
+    # <YESTERDAY>..." pin, so the standard `Read <instr>` pattern
+    # doesn't apply. `custom_prompt: true` flags this to the runner.
+    custom_prompt: true
+    # The date-pin block appended to the instruction file's raw contents
+    # before the CC invocation. `{yesterday}` is resolved by the runner
+    # at fire time using system-TZ date arithmetic, matching the live
+    # trigger's `$(date -v-1d '+%Y-%m-%d')` call. The leading `\n\n`
+    # reproduces the blank-line separator between the instruction body
+    # and the date pin in the live shell PROMPT.
+    custom_prompt_suffix: "\n\nIMPORTANT: The target date for this consolidation run is {yesterday}. Use this date everywhere instead of computing yesterday's date yourself."
+    # Two inline pre-steps: (1) export Apple Notes journals from a bash
+    # context that has TCC access (CC does not), (2) extract
+    # yesterday's Claude Code session transcripts into memory/daily/
+    # fragments. Both are `allow_fail: true` because the live trigger
+    # continues on their failure (see the `|| { echo warning; }` and
+    # the `cc_alert ... "journal export step failed (continuing)"`
+    # calls in the trigger script).
+    pre_steps:
+      - cmd:
+          - /opt/homebrew/bin/python3
+          - scripts/export-journals.py
+          - "30"
+        allow_fail: true
+        comment: "Export Apple Notes daily journals (bash has TCC access; CC does not). The live trigger skips this when a recent export (<3h) is on disk; the runner will re-implement that freshness check."
+      - cmd:
+          - /opt/homebrew/bin/python3
+          - scripts/extract-cc-sessions.py
+          - --since
+          - "{yesterday}"
+        allow_fail: true
+        comment: "Extract Claude Code session transcripts for {yesterday} into memory/daily/ fragments."
+    timeout_seconds: 7200
+    # DIVERGENCE: the live plist uses a MINIMAL env (PATH only, no
+    # HOME) and writes to fixed StandardOutPath/StandardErrorPath. We
+    # preserve the minimal PATH here so the trigger's implicit HOME
+    # inherit doesn't accidentally flip on cutover. The plist
+    # materializer will still emit HOME via the standard plist
+    # WorkingDirectory + launchd's own defaults.
+    env:
+      PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+
+  - name: weekly-deep-consolidation
+    kind: llm
+    # Monday at 02:27 PT — deliberately AFTER the 01:00 daily
+    # consolidation so Sunday's sessions are visible. plist
+    # StartCalendarInterval: Weekday=1, Hour=2, Minute=27.
+    schedule: "27 2 * * 1"
+    model: claude-opus-4-6
+    instruction: recurring/weekly-deep-consolidation.md
+    # LANDMINE (§7): weekly-deep-consolidation edits memory in place
+    # (like memory-description). The live trigger does NOT pass an
+    # expected-output glob — inventing one would false-alarm on every
+    # run.
+    expected_output_glob: null
+    idempotency_marker: null
+    # LANDMINE (§7): custom prompt. The live trigger cat's the
+    # recurring/*.md into a prompt string, no `Read <instr>` wrapper.
+    custom_prompt: true
+    # No pre-steps — the trigger script goes straight from
+    # setup_logging to the CC invocation.
+    timeout_seconds: 7200
+    # DIVERGENCE: minimal env matches the live plist (PATH only, no
+    # HOME). Same reasoning as daily-consolidation above.
+    env:
+      PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+
+  # --- 4 plain-script jobs --------------------------------------------
+  # These are NOT rewrite targets (no LLM invocation, no
+  # recurring/*.md), but `mineru cron list` should still show them and
+  # `mineru cron install` should still materialize their plists.
+
+  - name: cleanup-retention
+    kind: script
+    # 2nd of month at 04:07 PT. plist StartCalendarInterval: Day=2,
+    # Hour=4, Minute=7.
+    # DIVERGENCE: cron string has no "day-of-month + day-of-week" way
+    # to say "the 2nd of every month" — the standard notation is
+    # `7 4 2 * *` (minute=7, hour=4, DoM=2, month=*, DoW=*). The plist
+    # materializer knows to emit DoM=2 from this shape.
+    schedule: "7 4 2 * *"
+    program_args:
+      - /bin/bash
+      - /Users/example/.mineru/scripts/cleanup-retention.sh
+    timeout_seconds: 1800
+    # DIVERGENCE: the live plist's env uses a different PATH ordering
+    # (Homebrew first, .local/bin last). Preserved here.
+    env:
+      PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/example/.local/bin
+      HOME: /Users/example
+
+  - name: group-members-sweep
+    kind: script
+    # Daily at 23:00 PT. plist StartCalendarInterval: Hour=23, Minute=0.
+    schedule: "0 23 * * *"
+    program_args:
+      - /bin/bash
+      - /Users/example/.mineru/scripts/run-group-members-sweep.sh
+    # Live plist has TimeOut=300 (5 minutes) — this is a fast contact-
+    # sweep, not a long LLM run.
+    timeout_seconds: 300
+
+  - name: pre-export-journals
+    kind: script
+    # Daily at 00:45 PT. plist StartCalendarInterval: Hour=0, Minute=45.
+    schedule: "45 0 * * *"
+    program_args:
+      - /opt/homebrew/bin/python3
+      - /Users/example/.mineru/scripts/export-journals.py
+      - "30"
+    timeout_seconds: 300
+    # DIVERGENCE: the live plist's env is PATH-only-no-.local/bin
+    # (Homebrew-first) with HOME. Preserved here.
+    env:
+      PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+      HOME: /Users/example
+
+  - name: keepsake-autodeploy
+    kind: script
+    # Daily at 03:00 PT. plist StartCalendarInterval: Hour=3, Minute=0.
+    schedule: "0 3 * * *"
+    program_args:
+      - /opt/homebrew/bin/python3
+      - /Users/example/.mineru/scripts/keepsake-autodeploy.py
+    timeout_seconds: 600
+    # DIVERGENCE: like cleanup-retention, .local/bin lands at the END
+    # of PATH in the live plist. Preserved here.
+    env:
+      PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/example/.local/bin
+      HOME: /Users/example

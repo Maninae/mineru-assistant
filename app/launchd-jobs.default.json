@@ -1,0 +1,26 @@
+{
+  "_comment": "Bundled default Pulse job registry. Loaded by app/launchd_jobs.py when the user file (MINERU_LAUNCHD_JOBS_FILE, default $MINERU_HOME/config/launchd-jobs.json) is absent, so the Pulse tab works out-of-the-box. A downstream install overrides it by dropping its own file at that path. Each job is keyed by label_suffix (the part after LAUNCHD_LABEL_PREFIX, e.g. 'morning-brief' -> 'com.mineru.morning-brief'). freshness.kind is one of: newest_in_dir (needs dir, optional exclude[]), file_mtime (needs path), neutral (no artifact). dir/path/exclude are relative to MINERU_HOME. Jobs without a freshness block (always-on daemons) fall back to their plist log mtime.",
+  "jobs": [
+    {"label_suffix": "morning-brief", "display_name": "Morning Briefing", "freshness": {"kind": "newest_in_dir", "dir": "briefs_morning"}},
+    {"label_suffix": "news-brief", "display_name": "Local News Brief", "freshness": {"kind": "newest_in_dir", "dir": "briefs_news"}},
+    {"label_suffix": "daily-transactions", "display_name": "Weekly Transactions", "freshness": {"kind": "newest_in_dir", "dir": "briefs_financial"}},
+    {"label_suffix": "financial-checkup", "display_name": "Monthly Financial Checkup", "freshness": {"kind": "newest_in_dir", "dir": "briefs_financial"}},
+    {"label_suffix": "prompts-alignment", "display_name": "Prompts Alignment", "freshness": {"kind": "newest_in_dir", "dir": "briefs_prompts_alignment"}},
+    {"label_suffix": "inbox-triage", "display_name": "Inbox Triage", "freshness": {"kind": "newest_in_dir", "dir": "briefs_inbox"}},
+    {"label_suffix": "curiosity-question", "display_name": "Daily Curiosity Question", "freshness": {"kind": "newest_in_dir", "dir": "briefs_curiosity"}},
+    {"label_suffix": "memory-dedup", "display_name": "Memory Dedup", "freshness": {"kind": "newest_in_dir", "dir": "briefs_dedup"}},
+    {"label_suffix": "weekly-deep-consolidation", "display_name": "Weekly Deep Consolidation", "freshness": {"kind": "newest_in_dir", "dir": "briefs_consolidation"}},
+    {"label_suffix": "group-members-sweep", "display_name": "Contacts & Groups Sweep", "freshness": {"kind": "newest_in_dir", "dir": "briefs_imsg_group_members_updates"}},
+    {"label_suffix": "daily-consolidation", "display_name": "Daily Consolidation", "freshness": {"kind": "newest_in_dir", "dir": "memory/daily"}},
+    {"label_suffix": "memory-description", "display_name": "Memory Description", "freshness": {"kind": "newest_in_dir", "dir": "memory", "exclude": ["memory/daily", "memory/monthly"]}},
+    {"label_suffix": "pre-export-journals", "display_name": "Journal Pre-Export", "freshness": {"kind": "newest_in_dir", "dir": "journal_exports"}},
+    {"label_suffix": "keepsake-autodeploy", "display_name": "Keepsake Autodeploy", "freshness": {"kind": "file_mtime", "path": "cache/keepsake-autodeploy-state.json"}},
+    {"label_suffix": "daemon-watchdog", "display_name": "Daemon Watchdog", "freshness": {"kind": "neutral"}},
+    {"label_suffix": "cleanup-retention", "display_name": "Cleanup Retention", "freshness": {"kind": "neutral"}},
+    {"label_suffix": "exercise-suggestion", "display_name": "Daily Exercise Suggestion"},
+    {"label_suffix": "house-scan", "display_name": "House Deal Scanner", "freshness": {"kind": "file_mtime", "path": "logs/house-scan/house-scan.log"}},
+    {"label_suffix": "model-watch", "display_name": "Model Watch", "freshness": {"kind": "newest_in_dir", "dir": "briefs_model_watch"}},
+    {"label_suffix": "telegram-daemon", "display_name": "Telegram Daemon"},
+    {"label_suffix": "webapp", "display_name": "Mineru Web App"}
+  ]
+}

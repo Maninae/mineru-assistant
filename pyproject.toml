@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mineru-assistant"
+version = "0.1.0"
+description = "mineru: unified CLI front door over every mineru-assistant capability"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "mineru-assistant contributors" }]
+dependencies = [
+    "typer>=0.12,<1.0",
+    "PyYAML>=6.0,<7.0",
+    # `cryptography` is required by `app/webpush_crypto.py` (P-256 ECDH,
+    # HKDF, AES-GCM) which the webpush RFC-8291 test suite exercises.
+    # Upper cap matches the pin-style consistency the other pinned deps use;
+    # bump the cap after re-running the RFC-8291 test suite on the new major.
+    "cryptography>=42,<60",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+]
+
+[project.scripts]
+mineru = "mineru_cli.app:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mineru_cli*"]
+
+# Pytest is scoped to `tests/` so the mineru suite runs deterministically
+# from the repo venv. The engine tree carries other pre-existing test suites
+# (e.g. `scripts/msearch/tests/`) that belong to their own tools and their own
+# fixture setups; they're outside the CLI's contract and should not be
+# auto-collected by `pytest -q` at the repo root.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"

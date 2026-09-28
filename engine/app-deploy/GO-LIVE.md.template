@@ -1,0 +1,43 @@
+# {{PERSONA_NAME}} web app — go-live checklist
+
+The app is built, security-hardened (two adversarial review rounds), and committed. It is NOT yet running persistently or exposed on the tailnet — those steps are below, gated on {{USER_NAME}}. Serving target: `https://{{TAILSCALE_HOSTNAME}}` → `127.0.0.1:5195`.
+
+## Decision to make first: household access (A or B — the gate is BUILT)
+
+The tailnet may include other household devices. The app serves finances/health/family/doctor briefs. A shared-passphrase gate is now built and security-audited (secure-by-default, toggleable — it activates iff a passphrase is set in the Keychain). So the decision is a 10-second ops choice, no rebuild:
+- **(A) Tailnet-only, no gate** — do nothing. Leave the Keychain empty; the app serves open on the tailnet (accepts that any tailnet device — including a household member's phone — can read it).
+- **(B) Passphrase gate (recommended)** — run the helper once:
+  ```
+  bash {{MINERU_HOME}}/app/deploy/set-passphrase.sh
+  ```
+  It prompts (hidden) for a passphrase, stores only its SHA-256 in the Keychain, and prints the restart step. After that the app shows a lock screen; unlock once per device (persists 7 days). Revert to A anytime: `security delete-generic-password -a mineru -s mineru-webapp-passphrase-hash` + restart.
+
+Gate internals: random bearer token (HttpOnly/Secure/SameSite=Strict cookie), OWASP-style brute-force lockout, constant-time compare, fail-closed. Audited twice — no bypass. Everything else below is mechanical.
+
+## Steps
+
+1. **({{USER_NAME}}, admin console)** Define the Tailscale service:
+   - Open https://login.tailscale.com/admin/services
+   - Advertise → Define a Service → name it `{{PERSONA_NAME_LOWER}}`, endpoint `tcp:443` → Add service.
+   - (The server is already tagged `tag:home-server`, so no node-tagging step is needed.)
+
+2. **({{USER_NAME}} or {{PERSONA_NAME}})** Start the app persistently:
+   ```
+   mkdir -p {{MINERU_HOME}}/logs/webapp
+   cp {{MINERU_HOME}}/app/deploy/{{LAUNCHD_PREFIX}}.webapp.plist {{USER_HOME}}/Library/LaunchAgents/
+   launchctl bootstrap gui/$(id -u) {{USER_HOME}}/Library/LaunchAgents/{{LAUNCHD_PREFIX}}.webapp.plist
+   launchctl enable gui/$(id -u)/{{LAUNCHD_PREFIX}}.webapp
+   curl -sI http://127.0.0.1:5195/ | head -1   # expect HTTP/1.0 200 OK
+   ```
+
+3. **({{PERSONA_NAME}})** Advertise the service to the local port:
+   ```
+   TS=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+   "$TS" serve --service=svc:{{PERSONA_NAME_LOWER}} --bg --https=443 http://127.0.0.1:5195
+   "$TS" serve status   # confirm svc:{{PERSONA_NAME_LOWER}} handler present
+   ```
+
+4. **({{USER_NAME}}, admin console)** Approve the host:
+   - Open https://login.tailscale.com/admin/services → click `{{PERSONA_NAME_LOWER}}` → under Hosts, Approve your server node (shown pending).
+
+5. **({{USER_NAME}}, iPhone — the only valid reachability test)** Open `https://{{TAILSCALE_HOSTNAME}}` in Safari (allow ~10s first load for cert). Then Share → Add to Home Screen for the PWA install. Do NOT curl the service VIP from the server itself — a host can't route to its own service VIP; that's a known non-fault, not a failure.

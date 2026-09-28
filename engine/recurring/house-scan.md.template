@@ -1,0 +1,93 @@
+# house-scan — config-driven for-sale home deal scanner
+
+**Runs:** daily at 8:07 AM (`{{LAUNCHD_PREFIX}}.house-scan` launchd job).
+**Model:** none — deterministic Python plumbing.
+**Script:** `scripts/house_scan.py` (stdlib-only, `/usr/bin/python3`) plus:
+  - `scripts/house_scan_neighborhoods.py` — location gate, property-type filter, address blocklist, desirability scoring.
+  - `scripts/house_scan_schools.py` — per-listing GreatSchools extractor via the stealth browser.
+  - `scripts/house_scan_school_verdicts.py` — per-school researched include/exclude verdicts that decide the school gate (numeric floors are only the fallback).
+**Config:** `$MINERU_HOUSE_SCAN_CONFIG`, default `{{MINERU_HOME}}/config/house_scan_config.json` (all tunables; re-read every run, no restart needed). Starter: `engine/config/house_scan_config.example.json`.
+**School verdicts:** `{{MINERU_HOME}}/config/house_scan_school_verdicts.json` (config key `school_verdicts_path`).
+**State:** `{{MINERU_HOME}}/cache/house_scan_seen.json` (per-listing history, reported-flag set, cached school data).
+**Brief output:** `{{BRIEFS_ROOT}}/briefs_house_scan/house-scan-YYYY-MM-DD.md`.
+**Logs:** `{{MINERU_HOME}}/logs/house-scan/house-scan.log` + launchd stdout/stderr in the same dir.
+
+## Purpose
+
+Catch good for-sale home deals as they hit {{USER_NAME}}'s target market, deliver a short Telegram digest with a HANDFUL of desirable-location candidates per week (never a firehose), and stay silent when nothing is new or notable.
+
+Ranking philosophy: absolute desirability dominates intra-city discount. A great house in a strong-fabric city with good schools beats a cheap house in a weak-fabric city, even when the cheap one is 30% under its city median.
+
+## How it works
+
+1. Loops each city in `cities` and opens a Redfin filtered-search URL in the stealth browser (`bin/browser`), newest-first with hard filters in the URL (`max-price`, `min-beds`, `min-baths`, `min-sqft`, `property-type`).
+2. Extracts listing cards with a JS extractor: price, address, stats, sashes, up to 2000 chars of card description.
+3. Normalizes + dedups by listing URL (per-city searches overlap into adjacent cities).
+4. **Filter cascade**, each listing must survive all of:
+   1. **Location gate** — `classify_location()` against the per-city `neighborhood_policy` (ZIP + keyword allow/deny).
+   2. **Property-type filter** — drops condo units and new-construction plan pages (`property_type_excludes`).
+   3. **Address blocklist** — {{USER_NAME}}'s manual veto list (`address_blocklist`), case-insensitive substring match.
+5. **Fetch schools** — for each survivor (capped at `school_signal.max_fetches_per_run`), open the Redfin detail page and pull assigned elementary/middle/high schools + GreatSchools ratings. Cached in seen-state, fetched once per listing ever. Missing data flows through as "unknown".
+6. **School gate, per school** — each assigned school is looked up in the verdict file (name + optional city list, so same-named schools in different cities stay distinct). `exclude` drops the listing from every bucket; `include` passes that tier regardless of its number (the digest marks it "vetted in" when its number is under the fallback floor). Schools with no verdict fall back to the `school_signal.min_*_rating` floors (0 = tier not gated), and each such decision is logged as "unresearched" so the verdict list can grow.
+7. **Deal flags** — price_cut / below_median / stale / keyword / sash. Each flag TYPE surfaces once per listing.
+8. **Bucket routing** — NEW / PRICE-DROP / FLAG / VERIFY (below).
+9. **Ranks each bucket** with `score_listing()`: `city_tier × tier + schools × (avg − 5) + capped below-median bonus − steep-discount penalty + price_cut × drop + dom_bonus × min(dom, 60) + sqft_bonus × max(0, sqft − 1500)`.
+10. Caps to `max_new / max_reduced / max_flagged / max_verify` per digest.
+11. Delivers via `scripts/deliver-output.py`. Silent otherwise.
+
+## The location gate
+
+Per-city policy in `neighborhood_policy.cities.<City>`. Evaluation order (first hit wins):
+
+0. Parsed city has no policy entry → EXCLUDE (Redfin spills neighboring towns into each search).
+1. `require_city_in_address` mismatch → EXCLUDE.
+2. `include_keywords` matched in address or card text → INCLUDE.
+3. `exclude_keywords` matched → EXCLUDE.
+4. ZIP in `exclude_zips` → EXCLUDE; 5. in `include_zips` → INCLUDE; 6. in `mixed_zips` → `mixed_zip_default`.
+7. `city.default_verdict`, else global `default_verdict`.
+
+Keyword matching is word-boundary and case-insensitive. ZIPs parse as the five digits after a two-letter state code; override with `neighborhood_policy.zip_regex`.
+
+## Delivery buckets
+
+- **NEW** — first sighting, passed every gate. Ranked + capped.
+- **PRICE-DROP** — recorded price changed since last run.
+- **FLAG** — existing listing where a new flag type just fired.
+- **VERIFY** — NEW listings at least `steep_discount_flag_pct` under the city median $/sqft; surfaced with a "treat with skepticism" note, since that discount usually means a condition or location problem.
+
+Each bullet: bold headline, then address, schools, why-flagged, URL. No markdown tables; no italic-underscore spans (Telegram breaks them).
+
+## Tuning
+
+Every knob is in the config file; read its `_note` fields. Common edits: a researched school verdict → the verdict file; a vetoed street or listing → `address_blocklist`; a city to de-prefer → `city_desirability_tiers`; a new MLS keyword → `deal_flags.description_keywords`; refresh `median_price_per_sqft_by_city` quarterly.
+
+## First run (bootstrap)
+
+With an empty seen-state the whole current market becomes the seed: every listing is recorded, currently-firing flags are pre-marked as reported, and one "House scanner primed" line ships to Telegram. To re-bootstrap after a big config change, `trash {{MINERU_HOME}}/cache/house_scan_seen.json`.
+
+## Failure modes
+
+- **0 cards across all cities:** Redfin markup shifted or the browser is blocked. Delivers a "needs attention" line, exits non-zero.
+- **Every listing excluded by the location gate:** likely a policy typo or markup change. Delivers a "needs attention" line.
+- **School fetch failures:** listings surface tagged "Schools unknown".
+
+## Manual invocations
+
+```bash
+# Normal run (what launchd fires):
+/usr/bin/python3 {{MINERU_HOME}}/scripts/house_scan.py
+
+# Dry run: build the digest but do not deliver or update state (also skips school fetches).
+/usr/bin/python3 {{MINERU_HOME}}/scripts/house_scan.py --dry-run --no-persist
+
+# Point at a scratch config:
+/usr/bin/python3 {{MINERU_HOME}}/scripts/house_scan.py --config /tmp/scratch.json --dry-run
+```
+
+## Disable / re-enable
+
+```bash
+launchctl bootout "gui/$(id -u)/{{LAUNCHD_PREFIX}}.house-scan"
+launchctl bootstrap "gui/$(id -u)" {{USER_HOME}}/Library/LaunchAgents/{{LAUNCHD_PREFIX}}.house-scan.plist
+launchctl kickstart "gui/$(id -u)/{{LAUNCHD_PREFIX}}.house-scan"
+```

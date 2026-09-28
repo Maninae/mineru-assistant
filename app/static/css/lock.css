@@ -1,0 +1,150 @@
+/*
+ * Passphrase lock screen. Reuses the shared theme tokens from tokens.css so
+ * the card matches whatever theme the operator last picked (persisted in localStorage,
+ * which we can't read from here — the lock screen paints in the OS-preferred
+ * palette instead, which is close enough for a login flow).
+ *
+ * Deliberately small and standalone. No shared app CSS, no shared app JS.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+body.lock-body {
+  margin: 0;
+  /* Fold in every safe-area inset so the card stays clear of the Dynamic
+     Island, the home indicator, and (in landscape) the island's side
+     shadow. 24px is the visual baseline; the insets add on top. */
+  padding:
+    calc(24px + env(safe-area-inset-top, 0))
+    calc(24px + env(safe-area-inset-right, 0))
+    calc(24px + env(safe-area-inset-bottom, 0))
+    calc(24px + env(safe-area-inset-left, 0));
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg);
+  background-image: var(--wallpaper), var(--wallpaper-accent);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.lock-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 32px 28px 28px;
+  background: var(--surface-raised);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+}
+
+.lock-mark {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.lock-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+}
+
+.lock-sub {
+  margin: 0 0 22px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.lock-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.lock-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.lock-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--divider-strong);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: var(--font-body);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.lock-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(121, 226, 179, 0.16);
+}
+
+.lock-button {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-body);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.lock-button:hover {
+  background: var(--accent-strong);
+}
+
+.lock-button:active {
+  transform: translateY(1px);
+}
+
+.lock-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}
+
+.lock-message {
+  margin-top: 16px;
+  min-height: 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.lock-message--err {
+  color: var(--status-failed);
+}
+
+.lock-message--ok {
+  color: var(--status-fresh);
+}

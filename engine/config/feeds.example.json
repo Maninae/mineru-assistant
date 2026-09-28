@@ -1,0 +1,15 @@
+{
+  "_comment": "EXAMPLE web-app feed registry. Copy to $MINERU_HOME/config/feeds.json (or point MINERU_FEEDS_FILE at it) and edit. This file REPLACES the bundled default list (app/feeds.default.json), so keep the generic feeds you want and add your own. Fields: id (stable, used in URLs and the seen ledger), dirs (brief directories relative to MINERU_HOME, each under briefs_*, reports, creations, inbox or outbox; anything else fails app startup), display_name, emoji, accent (a tokens.css accent name: sunrise, slate, gold, violet, ink, amber, teal, rose, muted), group (sidebar section, first-seen order; default 'Feeds'). Sidebar order = file order. The 'pet' and 'model_watch' entries show how to add feeds for jobs of your own; pair each with a launchd-jobs.json entry so Pulse tracks the job.",
+  "feeds": [
+    {"id": "morning", "dirs": ["briefs_morning"], "display_name": "Morning", "emoji": "🌅", "accent": "sunrise", "group": "Daily"},
+    {"id": "news", "dirs": ["briefs_news"], "display_name": "News", "emoji": "📰", "accent": "slate", "group": "Daily"},
+    {"id": "financial", "dirs": ["briefs_financial"], "display_name": "Financial", "emoji": "💰", "accent": "gold", "group": "Daily"},
+    {"id": "curiosity", "dirs": ["briefs_curiosity"], "display_name": "Curiosity", "emoji": "💡", "accent": "violet", "group": "Daily"},
+    {"id": "pet", "dirs": ["briefs_pet"], "display_name": "Pet", "emoji": "🐈", "accent": "ink", "group": "Daily"},
+    {"id": "inbox", "dirs": ["briefs_inbox"], "display_name": "Inbox Triage", "emoji": "📬", "accent": "amber", "group": "System"},
+    {"id": "prompts_alignment", "dirs": ["briefs_prompts_alignment"], "display_name": "Prompts Alignment", "emoji": "🧭", "accent": "teal", "group": "System"},
+    {"id": "model_watch", "dirs": ["briefs_model_watch"], "display_name": "Model Watch", "emoji": "🔎", "accent": "slate", "group": "System"},
+    {"id": "doctor", "dirs": ["briefs_doctor"], "display_name": "Doctor", "emoji": "🩺", "accent": "rose", "group": "System"},
+    {"id": "system", "dirs": ["briefs_dedup", "briefs_consolidation", "briefs_imsg_group_members_updates"], "display_name": "System", "emoji": "⚙️", "accent": "muted", "group": "System"}
+  ]
+}

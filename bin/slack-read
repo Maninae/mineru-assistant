@@ -1,0 +1,29 @@
+#!/bin/bash
+# slack-read: Read Slack channels with user names resolved locally (no extra API calls)
+# Usage: slack-read <channel_id> [limit]
+
+set -e
+
+CHANNEL="${1:?Usage: slack-read <channel_id> [limit]}"
+LIMIT="${2:-10}"
+CACHE="${MINERU_HOME:-$HOME/.mineru}/cache/slack-users.json"
+TOKEN=$(security find-generic-password -a "${SLACK_KEYCHAIN_ACCOUNT:-mineru}" -s "${SLACK_KEYCHAIN_SERVICE:-slack-bot-token}" -w 2>/dev/null) || { echo "Error: Slack token not in Keychain" >&2; exit 1; }
+
+if [[ ! -f "$CACHE" ]]; then
+  echo "Error: User cache not found at $CACHE" >&2
+  echo "Run: slack-refresh-users" >&2
+  exit 1
+fi
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://slack.com/api/conversations.history?channel=$CHANNEL&limit=$LIMIT" | \
+  jq --slurpfile users "$CACHE" '
+    .messages | reverse | .[] | 
+    {
+      ts,
+      user: ($users[0][.user].real_name // $users[0][.user].name // .user),
+      text,
+      reactions: [.reactions[]?.name],
+      replies: .reply_count
+    }
+  '

@@ -1,0 +1,76 @@
+#!/bin/bash
+# imsg-named: wrapper around imsg that resolves phone numbers to contact names
+# Usage: imsg-named [--refresh] <imsg-args...>
+#
+# Examples:
+#   imsg-named chats --limit 10 --json
+#   imsg-named history --chat-id 299 --limit 20 --json
+#   imsg-named --refresh chats --limit 5 --json   # rebuild contact map first
+
+set -e
+
+SCRIPT_DIR="${MINERU_HOME:-$HOME/.mineru}/scripts"
+CACHE_FILE="${MINERU_HOME:-$HOME/.mineru}/cache/contact_mapping.json"
+
+# Handle --refresh flag
+if [[ "$1" == "--refresh" ]]; then
+    echo "🔄 Refreshing contact map..." >&2
+    python3 "$SCRIPT_DIR/build_contact_map.py" >&2
+    echo "🔄 Refreshing group membership cache..." >&2
+    python3 "$SCRIPT_DIR/build_group_members.py" >&2
+    shift
+fi
+
+# Check if contact map exists
+if [[ ! -f "$CACHE_FILE" ]]; then
+    echo "📇 Building contact map (first run)..." >&2
+    python3 "$SCRIPT_DIR/build_contact_map.py" >&2
+fi
+
+# Check if group members cache exists
+GROUP_CACHE="${MINERU_HOME:-$HOME/.mineru}/cache/group_members.json"
+if [[ ! -f "$GROUP_CACHE" ]]; then
+    echo "👥 Building group membership cache (first run)..." >&2
+    python3 "$SCRIPT_DIR/build_group_members.py" >&2
+fi
+
+# Auto-add --json for chats/history commands if not already present
+ARGS=("$@")
+FIRST_ARG="${ARGS[0]:-}"
+
+# Check if --json is already in args
+HAS_JSON=false
+for arg in "${ARGS[@]}"; do
+    if [[ "$arg" == "--json" || "$arg" == "-j" ]]; then
+        HAS_JSON=true
+        break
+    fi
+done
+
+# Add --json by default for chats and history commands
+if [[ "$HAS_JSON" == "false" && ("$FIRST_ARG" == "chats" || "$FIRST_ARG" == "history") ]]; then
+    ARGS+=("--json")
+fi
+
+# Determine validation surface based on command
+VALIDATOR="$SCRIPT_DIR/boundary_validator.py"
+RAW_SURFACE=""
+NAMED_SURFACE=""
+if [[ "$FIRST_ARG" == "chats" ]]; then
+    RAW_SURFACE="imsg.chats"
+    NAMED_SURFACE="imsg_named.chats"
+elif [[ "$FIRST_ARG" == "history" ]]; then
+    RAW_SURFACE="imsg.history"
+    NAMED_SURFACE="imsg_named.history"
+fi
+
+# Run imsg → validate raw → resolve contacts → validate resolved
+if [[ -n "$RAW_SURFACE" && -f "$VALIDATOR" ]]; then
+    imsg "${ARGS[@]}" \
+        | python3 "$VALIDATOR" --surface "$RAW_SURFACE" \
+        | python3 "$SCRIPT_DIR/lookup_contact.py" --stdin \
+        | python3 "$VALIDATOR" --surface "$NAMED_SURFACE"
+else
+    # No validator available or unknown command — pass through as before
+    imsg "${ARGS[@]}" | python3 "$SCRIPT_DIR/lookup_contact.py" --stdin
+fi

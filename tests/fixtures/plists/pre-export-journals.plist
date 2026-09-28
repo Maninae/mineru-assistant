@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.mineru.pre-export-journals</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/python3</string>
+        <string>/Users/example/.mineru/scripts/export-journals.py</string>
+        <string>30</string>
+    </array>
+
+    <!-- daily at 00:45 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>0</integer>
+        <key>Minute</key>
+        <integer>45</integer>
+    </dict>
+
+    <key>TimeOut</key>
+    <integer>300</integer>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/example/.mineru</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/example</string>
+        <key>MINERU_HOME</key>
+        <string>/Users/example/.mineru</string>
+        <key>MINERU_KEYCHAIN_ACCOUNT</key>
+        <string>mineru</string>
+        <key>MINERU_INJECT_QUEUE_DIR</key>
+        <string>/Users/example/.mineru/cache/inject-queue</string>
+    </dict>
+</dict>
+</plist>

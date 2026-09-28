@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LAUNCHD_PREFIX}}.daemon-watchdog</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>{{USER_DEV_ROOT}}/claude-landline/deploy/watchdog.sh</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>300</integer>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{USER_HOME}}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>{{USER_HOME}}</string>
+        <key>LANDLINE_WORKSPACE</key>
+        <string>{{MINERU_HOME}}</string>
+        <key>LANDLINE_PLIST</key>
+        <string>{{USER_HOME}}/Library/LaunchAgents/{{LAUNCHD_PREFIX}}.telegram-daemon.plist</string>
+        <key>LANDLINE_LABEL</key>
+        <string>{{LAUNCHD_PREFIX}}.telegram-daemon</string>
+        <key>LANDLINE_WATCHDOG_LOG</key>
+        <string>{{MINERU_HOME}}/logs/telegram-daemon/watchdog.log</string>
+        <key>LANDLINE_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>MINERU_HOME</key>
+        <string>{{MINERU_HOME}}</string>
+        <key>MINERU_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>MINERU_INJECT_QUEUE_DIR</key>
+        <string>{{MINERU_INJECT_QUEUE_DIR}}</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>{{MINERU_HOME}}/logs/telegram-daemon/watchdog-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{MINERU_HOME}}/logs/telegram-daemon/watchdog-stderr.log</string>
+</dict>
+</plist>

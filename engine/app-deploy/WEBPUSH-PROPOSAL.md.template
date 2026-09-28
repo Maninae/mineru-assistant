@@ -1,0 +1,39 @@
+# Web Push for the {{PERSONA_NAME}} app — decision-ready proposal
+
+The highest-value remaining feature: native push notifications on {{USER_NAME}}'s phone when a brief lands, so the app can actually replace Telegram. This is decision-ready, not built, because it hinges on one architecture call (yours) and a final test that needs your physical phone. Everything else is designed and mostly verifiable now.
+
+## What it does
+When a cron writes a brief (deliver-output.py already runs at that moment), the phone's installed PWA gets a real lock-screen notification ("🌅 Morning brief"), tappable straight into that brief in the app — even when the app is closed. That's the thing Telegram currently does that the web app can't, and it's the last real gap before Telegram is optional.
+
+## The one decision that's yours: crypto dependency
+Web Push requires ECC crypto (VAPID = ES256/ECDSA-P256 JWT signing; payload encryption = ECDH-P256 + HKDF + AES128GCM per RFC 8291). Python stdlib has none of it. Two ways:
+
+- **(A) Zero-dep via `openssl`** — turns out NOT clean. VAPID signing (ECDSA-P256) and ECDH work fine via the openssl CLI, but RFC 8291 payload encryption needs **AES-128-GCM**, and the openssl `enc` CLI can't cleanly emit the AEAD auth tag, while Python stdlib has no AES at all. Hand-rolling AES-GCM in pure Python is a hard no (never hand-roll crypto). So the zero-dep path is effectively blocked at the encryption step.
+- **(B) Add a trusted crypto dependency** — `pywebpush` + `py-vapid` (the reference implementations), or the lower-level `cryptography` library. ~15 lines to send. This is the app's first dependency, installed for the launchd `/usr/bin/python3` (venv or system). Given (A) is blocked, this is effectively the path — **and it's your call** per "no untrusted installs, ask first." (These are trusted, widely-used libraries; the decision is about adding any dep to your system, not about their quality.)
+
+**Net:** the real decision is simply "add a trusted crypto dep to enable Web Push, yes/no." If yes, the build below is one focused session. If you'd rather keep the app dependency-free, Telegram stays the notification channel and the app remains the reading/triage surface — also a fine end state.
+
+## What's verifiable WITHOUT your phone (so we build it with confidence)
+- **VAPID keypair generation** (openssl) — verify it's a valid P-256 key.
+- **VAPID JWT signing** — verify the signature against the public key.
+- **RFC 8291 payload encryption** — RFC 8291 §5 publishes known-answer TEST VECTORS (fixed inputs → fixed ciphertext). We verify our encryption reproduces the RFC's exact output. That proves the crypto is correct without ever sending a real push.
+- **Service worker `push` + `notificationclick` handlers** — verify the SW registers and the handlers are wired.
+- **Subscribe endpoint** (`POST /api/push/subscribe`, stdlib, stores the subscription JSON 0600) — verify it stores + validates.
+- **deliver-output.py integration** — verify it constructs a well-formed encrypted request to the (mocked) push endpoint on brief delivery.
+
+## What genuinely needs your phone (the honest handoff)
+- Granting notification permission in the *installed* PWA (can't be scripted).
+- Creating the real push subscription (browser + Apple/FCM, on-device).
+- The one true end-to-end test: does the notification actually appear on your lock screen. iOS PWA push (16.4+) is real but finicky — this is the step that must be verified on the device, once.
+
+## Build plan (one focused session once you decide A/B + have your phone)
+1. Generate VAPID keypair → public key baked into the client, private key in Keychain.
+2. `sw.js`: add `push` (showNotification) + `notificationclick` (focus/open the brief) handlers.
+3. Client: an "Enable notifications" control (in Pulse or settings) → request permission → `pushManager.subscribe(vapidPublicKey)` → POST to `/api/push/subscribe`.
+4. Backend: `/api/push/subscribe` stores the subscription (behind the same Host/gate/security posture).
+5. `push_send.py` (openssl or pywebpush): VAPID-signed, RFC-8291-encrypted POST to the subscription endpoint. Verify against RFC test vectors.
+6. Wire `deliver-output.py` to call `push_send.py` after a successful brief delivery (parallel to the Telegram send — so briefs go to BOTH until you're confident, then Telegram becomes optional).
+7. On-device: install PWA → enable notifications → trigger a test brief → confirm it lands on the lock screen.
+
+## Why this isn't built yet (honest)
+Building the send-crypto blind and committing to architecture (A vs B) without your call would risk shipping something you don't want to maintain, and the delivery path can't be fully verified without your device. The responsible move is this decision-ready plan: pick A or B, and when you've got your phone for 20 minutes, we build + verify it in one pass. It's the biggest single lever toward deleting Telegram — worth doing right, together.

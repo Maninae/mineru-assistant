@@ -1,0 +1,11 @@
+# Private banned literals for the public-engine leak gates.
+#
+# Copy to $MINERU_HOME/config/banned-literals.txt (or point
+# MINERU_BANNED_LITERALS_FILE at your copy) and list, one per line, the strings
+# that identify you and must never appear in the engine repo: your name and your
+# household's, employer, school, church, street, local paper, mailing lists,
+# real message ids. Keep the real file OUT of the engine repo.
+#
+# Blank lines and lines starting with # are ignored. Matching is case-sensitive.
+Quillfeather Lane
+Northwind Rowing Club

@@ -1,0 +1,42 @@
+# Daily Exercise Suggestion
+
+Noon (12:00 PM) daily. **Plain Python, no LLM** — deterministic plumbing, not a reasoning job.
+
+## What it does
+
+Picks **3 movements**, each from a **different body group**, from {{USER_NAME}}'s exercise library and delivers them to Telegram at noon as a **visual collage photo** (the caption gives a one-sentence cue per move). The selection is a date-seeded rotation, so day-to-day variety is guaranteed and every run is reproducible.
+
+- **Script:** `{{MINERU_HOME}}/scripts/daily-exercise-suggestion.py`
+- **Library (private user data):** `{{BRIEFS_ROOT}}/briefs_exercise/exercises.json` — `groups`, `rotation_order`, and `exercises` (each tagged with a group, dose, one-line how-to, and optionally its `source_reel`, the `start_s`/`end_s` window in that reel, `crop_top`, and 3 cached `frames`). Shape: `engine/config/exercises.example.json`. An optional `library_note` becomes the message footer.
+- **Output:** renders a collage PNG and sends it as a Telegram photo via `scripts/telegram_send_photo.py`; **falls back to plain text** via `scripts/deliver-output.py` if the collage or send fails (e.g. a new exercise has no cached frames yet, or Pillow is missing). Archives `{{BRIEFS_ROOT}}/briefs_exercise/exercise-YYYY-MM-DD.md` (+ `.png`).
+- **"Today"** follows the `TZ` the launchd job stamps from the profile timezone ({{USER_TIMEZONE}}).
+- **Launchd:** `{{LAUNCHD_PREFIX}}.exercise-suggestion`.
+
+## Collage pipeline
+
+Each row = a black label bar (group — name — dose) above 3 frames spanning the movement (start → mid → end), pulled from the exercise's source reel. Modules:
+
+- `scripts/exercise_frame_select.py` — from a reel + `[start_s, end_s]`, extracts candidate frames (ffmpeg), drops the blurriest quartile, dHashes the rest, and picks 3 sharp, time-ordered, maximally-different frames. Frames cache to `briefs_exercise/frames/<slug>/{01,02,03}.jpg`.
+- `scripts/exercise_collage.py` — stacks the rows into one PNG (Pillow).
+- `scripts/telegram_send_photo.py` — Bot API `sendPhoto`.
+- `scripts/download-video.sh` — fetches a source reel with yt-dlp (keeps yt-dlp fresh, walks the login-wall fallbacks).
+
+Pillow + numpy (and system ffmpeg for frame selection) must be importable by the plist's interpreter; without them the job still delivers text.
+
+## Rotation logic
+
+Body groups cycle via a consecutive window of 3 over `rotation_order`, advancing one group per day, so each day features 3 distinct groups and the window walks every group. Within each featured group the exercise is `day_ordinal % group_size`, so a revisited group surfaces a different movement. A library with fewer than 3 groups shows each group once.
+
+## Maintaining it
+
+When {{USER_NAME}} shares a new exercise video, extract the movements and add each to `exercises.json`:
+
+1. `name`, `group`, `dose`, `how` (the rotation picks it up automatically), plus `source_reel` and the `start_s`/`end_s` window where it appears.
+2. Cache its 3 frames: download the reel to `{{MINERU_HOME}}/cache/exercise-reels/` with `scripts/download-video.sh <URL> --out <path.mp4>`, then run `select_frames(reel, start_s, end_s, briefs_exercise/frames/<slug>, crop_top=0.35)` and record the 3 paths (relative to the briefs root) in `frames`. A move without frames is still delivered, as text.
+
+## Manual run / testing
+
+- `python3 {{MINERU_HOME}}/scripts/daily-exercise-suggestion.py` — today: collage + deliver (skips if today's `.md` exists; `--force` to resend).
+- `... --dry-run` — print the text message only, no file, no delivery.
+- `... --date 2026-09-01 --dry-run` — a specific date (verify rotation).
+- `... --collage-sample /tmp/out.png [--date YYYY-MM-DD]` — render the collage PNG only, no delivery.

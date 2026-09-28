@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Mineru" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon-180.png" />
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon-180.png" />
+  <link rel="stylesheet" href="/static/css/tokens.css" />
+  <link rel="stylesheet" href="/static/css/layout.css" />
+  <link rel="stylesheet" href="/static/css/components.css" />
+  <title>Mineru</title>
+</head>
+<body>
+  <!--
+    Shell contract (see app/CLAUDE.md):
+      .app-shell = CSS grid, three persistent columns on desktop:
+        aside.sidebar       - folders + coordinator heartbeat
+        section.list-column - message list (own header + own body)
+        section.reader-column - reader (own header + own body)
+      Mobile collapses to a drill-down stack via `.stack-level-{0,1,2}` on
+      .app-shell; only one column is visible at a time.
+  -->
+  <div class="app-shell" id="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="app-mark" aria-hidden="true">🦊</span>
+        <span class="app-name">Mineru</span>
+      </div>
+
+      <!-- Inbox row: unified inbox landing, always visible at the top -->
+      <button type="button" class="sidebar-inbox-row" id="sidebar-inbox-row">
+        <span class="sidebar-inbox-glyph" aria-hidden="true">📥</span>
+        <span class="sidebar-inbox-label">Inbox</span>
+        <span class="sidebar-inbox-count" id="sidebar-inbox-count" hidden></span>
+      </button>
+
+      <!-- Feed folders, grouped under section labels (Daily / System / …) -->
+      <nav class="feed-groups" id="feed-groups" aria-label="Feed folders"></nav>
+
+      <!-- Bottom-pinned: nav to non-Inbox tabs + the coordinator heartbeat -->
+      <div class="sidebar-footer">
+        <div class="sidebar-footer-nav" role="tablist">
+          <button class="sidebar-nav-btn" data-tab="library" type="button" role="tab">
+            <span class="sidebar-nav-emoji" aria-hidden="true">📚</span>
+            <span class="sidebar-nav-label">Library</span>
+          </button>
+          <button class="sidebar-nav-btn" data-tab="pulse" type="button" role="tab">
+            <span class="sidebar-nav-emoji" aria-hidden="true">⚙️</span>
+            <span class="sidebar-nav-label">Pulse</span>
+          </button>
+          <button class="sidebar-nav-btn" data-tab="chat" type="button" role="tab">
+            <span class="sidebar-nav-emoji" aria-hidden="true">💬</span>
+            <span class="sidebar-nav-label">Chat</span>
+            <span class="sidebar-nav-hint">soon</span>
+          </button>
+        </div>
+        <div class="coordinator-heartbeat" id="coordinator-heartbeat" aria-live="polite">
+          <span class="coordinator-dot" aria-hidden="true"></span>
+          <span class="coordinator-label">Coordinator</span>
+          <span class="coordinator-value" id="coordinator-value">—</span>
+        </div>
+      </div>
+    </aside>
+
+    <section class="list-column" id="list-column" aria-label="Message list">
+      <header class="list-header" id="list-header">
+        <button class="back-button" id="list-back" type="button" aria-label="Back" hidden>←</button>
+        <span class="list-title" id="list-title">Inbox</span>
+        <div class="list-header-actions" id="list-header-actions"></div>
+      </header>
+      <section class="list-body" id="list-body" aria-live="polite"></section>
+    </section>
+
+    <section class="reader-column" id="reader-column" aria-label="Reader">
+      <header class="reader-header" id="reader-header">
+        <button class="back-button" id="reader-back" type="button" aria-label="Back" hidden>←</button>
+        <div class="reader-header-text">
+          <div class="reader-title-row">
+            <span class="reader-title" id="reader-title"></span>
+            <span class="reader-status-pill" id="reader-status-pill" hidden></span>
+          </div>
+          <div class="reader-subline" id="reader-subline"></div>
+        </div>
+        <div class="reader-header-actions" id="reader-header-actions"></div>
+      </header>
+      <section class="reader-body" id="reader-body" aria-live="polite"></section>
+    </section>
+  </div>
+
+  <!-- Mobile bottom tabbar (kept for section switching on phones) -->
+  <nav class="mobile-tabbar" aria-label="Bottom">
+    <button class="tab-button" data-tab="inbox" type="button">
+      <span class="tab-emoji" aria-hidden="true">📥</span>
+      <span class="tab-label">Inbox</span>
+    </button>
+    <button class="tab-button" data-tab="library" type="button">
+      <span class="tab-emoji" aria-hidden="true">📚</span>
+      <span class="tab-label">Library</span>
+    </button>
+    <button class="tab-button" data-tab="pulse" type="button">
+      <span class="tab-emoji" aria-hidden="true">⚙️</span>
+      <span class="tab-label">Pulse</span>
+    </button>
+    <button class="tab-button" data-tab="chat" type="button">
+      <span class="tab-emoji" aria-hidden="true">💬</span>
+      <span class="tab-label">Chat</span>
+    </button>
+  </nav>
+
+  <script src="/static/vendor/marked.min.js"></script>
+  <script src="/static/vendor/purify.min.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/theme.js"></script>
+  <script src="/static/js/router.js"></script>
+  <script src="/static/js/search.js"></script>
+  <script src="/static/js/inbox.js"></script>
+  <script src="/static/js/library.js"></script>
+  <script src="/static/js/pulse.js"></script>
+  <script src="/static/js/push.js"></script>
+  <script src="/static/js/chat.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

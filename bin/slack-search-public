@@ -1,0 +1,72 @@
+#!/bin/bash
+# slack-search-public: Search public Slack messages by query.
+# Usage: slack-search-public <query> [--count N] [--sort timestamp|score]
+#
+# Wraps Slack's search.messages endpoint. Read-only.
+# NOTE: search.messages requires a USER token (xoxp-), not a bot token
+# (xoxb-). If the Keychain entry is a bot token, Slack returns
+# `not_allowed_token_type` in the JSON payload — we surface the raw
+# error field so the operator can diagnose immediately. Same-shaped
+# error propagation as slack-thread / slack-channels.
+
+set -e
+
+QUERY="${1:?Usage: slack-search-public <query> [--count N] [--sort timestamp|score]}"
+shift
+
+COUNT="20"
+SORT="timestamp"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --count)
+      COUNT="${2:?--count requires a value}"
+      shift 2
+      ;;
+    --sort)
+      SORT="${2:?--sort requires a value}"
+      shift 2
+      ;;
+    *)
+      echo "Error: unknown arg: $1" >&2
+      echo "Usage: slack-search-public <query> [--count N] [--sort timestamp|score]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+CACHE="${MINERU_HOME:-$HOME/.mineru}/cache/slack-users.json"
+TOKEN=$(security find-generic-password -a "${SLACK_KEYCHAIN_ACCOUNT:-mineru}" -s "${SLACK_KEYCHAIN_SERVICE:-slack-bot-token}" -w 2>/dev/null) || { echo "Error: Slack token not in Keychain" >&2; exit 1; }
+
+if [[ ! -f "$CACHE" ]]; then
+  echo "Error: User cache not found at $CACHE" >&2
+  echo "Run: slack-refresh-users" >&2
+  exit 1
+fi
+
+# URL-encode the query for a safe GET request.
+ENCODED_QUERY=$(jq -rn --arg q "$QUERY" '$q|@uri')
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://slack.com/api/search.messages?query=$ENCODED_QUERY&count=$COUNT&sort=$SORT" | \
+  jq --slurpfile users "$CACHE" '
+    if .ok == false then
+      {ok: false, error: .error}
+    else
+      {
+        ok: true,
+        query: "'"$QUERY"'",
+        total: .messages.total,
+        matches: [
+          .messages.matches[] | {
+            ts,
+            user: ($users[0][.user].real_name // $users[0][.user].name // .user // .username),
+            channel_id: .channel.id,
+            channel_name: .channel.name,
+            text,
+            permalink
+          }
+        ]
+      }
+    end
+  '

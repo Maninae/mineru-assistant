@@ -1,0 +1,30 @@
+{
+  "_comment": "Configuration for cleaning imsg-named output. Each command defines fields to drop, keep, and transform rules for nested objects.",
+
+  "history": {
+    "_description": "Message history cleaning. Removes internal identifiers and simplifies attachment/reaction metadata.",
+    "drop": ["guid"],
+    "keep": ["id", "chat_id", "created_at", "text", "sender_name", "sender", "is_from_me"],
+    "transform": {
+      "attachments": {
+        "_description": "Simplify each attachment to only size and sticker flag. Remove field entirely if empty array.",
+        "keep": ["total_bytes", "is_sticker"],
+        "remove_if_empty": true
+      },
+      "reactions": {
+        "_description": "Simplify each reaction to emoji and sender_name only. Remove field entirely if empty array.",
+        "keep": ["emoji", "sender_name"],
+        "remove_if_empty": true
+      }
+    }
+  },
+
+  "reaction_type_to_emoji": {
+    "love": "❤️",
+    "like": "👍",
+    "dislike": "👎",
+    "laugh": "😂",
+    "emphasize": "‼️",
+    "question": "❓"
+  }
+}

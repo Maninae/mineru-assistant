@@ -1,0 +1,34 @@
+{
+  "_comment": "EXAMPLE exercise library for the daily noon suggestion job (scripts/daily-exercise-suggestion.py). The real library is private user data at $MINERU_BRIEFS_ROOT/briefs_exercise/exercises.json. Each day the job walks a window of 3 over rotation_order and picks one exercise per featured group (day ordinal modulo group size). Every group in rotation_order needs at least one exercise. Optional per exercise: source, source_reel + start_s/end_s + crop_top (for scripts/exercise_frame_select.py) and frames (3 paths relative to the briefs root) for the collage; an exercise without frames is still delivered as text. library_note is an optional footer line.",
+  "library_note": "From your exercise library.",
+  "groups": [
+    {"key": "shoulders", "label": "Shoulders & upper back"},
+    {"key": "core", "label": "Core"}
+  ],
+  "rotation_order": ["shoulders", "core"],
+  "exercises": [
+    {
+      "name": "Wall Angels",
+      "group": "shoulders",
+      "dose": "10 reps",
+      "how": "Back flat on a wall, slide the arms up and down like a slow snow angel.",
+      "source": "Example Channel",
+      "source_reel": "https://example.com/reel/wall-angels",
+      "start_s": 4.0,
+      "end_s": 9.5,
+      "crop_top": 0.35,
+      "frames": [
+        "briefs_exercise/frames/wall-angels/01.jpg",
+        "briefs_exercise/frames/wall-angels/02.jpg",
+        "briefs_exercise/frames/wall-angels/03.jpg"
+      ]
+    },
+    {
+      "name": "Dead Bug",
+      "group": "core",
+      "dose": "2 x 8 per side",
+      "how": "On your back, lower the opposite arm and leg while the low back stays pressed down.",
+      "source": "Example Channel"
+    }
+  ]
+}

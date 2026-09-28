@@ -1,0 +1,72 @@
+# Synthetic profile fixture — persona Zephyr, user Sam.
+#
+# The second half of the validator's producibility check. Every value below
+# is intentionally FICTIONAL and shares NO overlap with any real operator
+# value. If the templating pass ever emits a real persona name or operator name or a live
+# calendar-id string when this profile is active, the leak came from a
+# LITERAL in a template — not from the render context — and the validator
+# catches it.
+#
+# Same schema as profile.yaml (same first-class fields + same extras keys);
+# the only thing that differs is the values.
+
+# --- Foundation ----------------------------------------------------------
+
+name: sam
+display_name: Sam
+assistant_name: Zephyr
+timezone: America/Denver
+
+keychain_account: zephyr
+launchd_label_prefix: com.zephyr
+
+workspace_absolute: /home/sam/.assistant
+memory_root: /home/sam/.assistant/memory
+briefs_root: /home/sam/.assistant
+
+journal_apple_notes_folder: Sam Journal
+
+secrets:
+  backends:
+    - env
+    - keychain
+  env_prefix: ZEPHYR_SECRET_
+
+# --- Persona extras ------------------------------------------------------
+
+persona_emoji: "\U0001F32C️"                   # 🌬️  wind (no fox anywhere)
+persona_origin: >-
+  Zephyr takes their name from the ancient west wind — a bringer of
+  gentler seasons, chosen for a soft, steady presence.
+persona_kind: >-
+  Digital companion and quiet advisor; a settled voice in an otherwise
+  noisy day.
+
+# --- User extras ---------------------------------------------------------
+
+user_full_name: Sam Rivera
+user_pronouns: they/them/theirs
+user_location: Denver, CO
+
+# --- Filesystem extras ---------------------------------------------------
+
+user_dev_root: /home/sam/code
+user_claude_home: /home/sam/.config/claude
+heavy_storage_root: /mnt/bulk
+
+# --- Household -----------------------------------------------------------
+
+household:
+  - name: Robin
+    relation: partner
+  - name: Juno
+    relation: dog
+key_people:
+  - name: Mira
+    relation: sibling
+  - name: Kai
+    relation: close friend
+
+# --- System namespacing extra --------------------------------------------
+
+app_keychain_service: zephyr-webapp-passphrase-hash

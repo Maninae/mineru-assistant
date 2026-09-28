@@ -1,0 +1,145 @@
+{
+  "$schema": "gog_cleaner_config.schema.json",
+  "_comment": "Configuration for cleaning gog output. Each service defines which fields to keep (allowlist) and which to explicitly drop (blocklist). Fields not in either list are kept by default.",
+  
+  "gmail": {
+    "_description": "Gmail message cleaning. Removes MIME structure, raw headers, and internal metadata.",
+    "search": {
+      "keep": ["id", "date", "from", "subject", "labels", "messageCount", "snippet", "nextPageToken", "threads"],
+      "drop": []
+    },
+    "get": {
+      "_comment": "KEEP top-level 'body' as plain text (HTML stripped if needed). gog typically returns it as text already; we run it through html_to_text defensively. Capped at 10K chars; --raw bypasses the cap. Snippet kept too as a short summary.",
+      "keep": ["id", "snippet", "labelIds", "body"],
+      "drop": ["historyId", "internalDate", "sizeEstimate", "threadId", "payload"],
+      "nested": {
+        "headers": {
+          "keep": ["from", "to", "cc", "bcc", "subject", "date", "reply-to"],
+          "drop": []
+        }
+      }
+    },
+    "thread_get": {
+      "_comment": "Cleans 'gmail thread get'. Extracts per-message body from payload.parts (text/plain preferred, text/html converted to text), capped at 10K chars. Drops raw header list and payload tree. Keeps id, snippet, synthesized {from,to,subject,date} headers, and the extracted body text.",
+      "_synthesize_headers_from_payload": ["from", "to", "subject", "date", "reply-to", "cc"],
+      "message_keep": ["id", "snippet", "headers", "body"],
+      "message_drop": ["historyId", "internalDate", "sizeEstimate", "labelIds", "threadId", "payload"]
+    }
+  },
+  
+  "calendar": {
+    "_description": "Calendar event cleaning. Removes etags, organizer details, and recurrence metadata.",
+    "events": {
+      "_comment": "Drops browser links, near-constant fields, and Meet blobs. Keeps organizer/creator/attendees but TRIMMED to email+displayName (+responseStatus for attendees) via nested rules — useful 'who made it / who's coming' at minimal token cost.",
+      "keep": ["id", "summary", "description", "start", "end", "location", "attendees", "status", "organizer", "creator"],
+      "drop": ["etag", "kind", "iCalUID", "recurringEventId", "originalStartTime", "sequence", "reminders", "colorId", "transparency", "updated", "created", "htmlLink", "eventType", "conferenceData"],
+      "nested": {
+        "start": {
+          "keep": ["dateTime", "date"],
+          "drop": ["timeZone"]
+        },
+        "end": {
+          "keep": ["dateTime", "date"],
+          "drop": ["timeZone"]
+        },
+        "creator": {
+          "keep": ["email", "displayName"],
+          "drop": ["self", "id"]
+        },
+        "organizer": {
+          "keep": ["email", "displayName"],
+          "drop": ["self", "id"]
+        },
+        "attendees": {
+          "keep": ["email", "displayName", "responseStatus"],
+          "drop": ["self", "id", "organizer", "optional", "resource", "comment", "additionalGuests"]
+        }
+      }
+    }
+  },
+
+  "drive": {
+    "_description": "Drive file metadata cleaning.",
+    "search": {
+      "keep": ["id", "name", "mimeType", "modifiedTime", "webViewLink", "parents", "size"],
+      "drop": ["kind", "version", "quotaBytesUsed", "md5Checksum", "headRevisionId", "capabilities"]
+    },
+    "get": {
+      "keep": ["id", "name", "mimeType", "modifiedTime", "webViewLink", "parents", "size", "description"],
+      "drop": ["kind", "version", "quotaBytesUsed", "md5Checksum", "headRevisionId", "capabilities"]
+    },
+    "ls": {
+      "keep": ["id", "name", "mimeType", "modifiedTime", "webViewLink", "parents", "size"],
+      "drop": ["kind", "version", "quotaBytesUsed", "md5Checksum", "headRevisionId", "capabilities"]
+    }
+  },
+  
+  "contacts": {
+    "_description": "Contacts cleaning.",
+    "list": {
+      "keep": ["resourceName", "names", "emailAddresses", "phoneNumbers", "organizations", "addresses", "birthdays"],
+      "drop": ["etag", "metadata", "coverPhotos", "photos"]
+    }
+  },
+  
+  "sheets": {
+    "_description": "Sheets data cleaning.",
+    "get": {
+      "keep": ["spreadsheetId", "properties", "sheets", "values"],
+      "drop": ["spreadsheetUrl", "developerMetadata"]
+    }
+  },
+  
+  "docs": {
+    "_description": "Docs content cleaning.",
+    "get": {
+      "keep": ["documentId", "title", "body", "content"],
+      "drop": ["revisionId", "documentStyle", "suggestionsViewMode"]
+    }
+  },
+  
+  "tasks": {
+    "_description": "Google Tasks cleaning.",
+    "list": {
+      "keep": ["id", "title", "notes", "due", "status", "completed", "parent", "position"],
+      "drop": ["etag", "kind", "selfLink", "updated", "deleted", "hidden"]
+    },
+    "get": {
+      "keep": ["id", "title", "notes", "due", "status", "completed", "parent", "position", "links"],
+      "drop": ["etag", "kind", "selfLink", "updated", "deleted", "hidden"]
+    }
+  },
+  
+  "command_classification": {
+    "_description": "Commands that read external data (need cleaning + screening) vs write commands (no screening needed). Supports nested commands like 'gmail.labels.list'.",
+    "read_commands": {
+      "gmail": ["search", "get", "attachment", "url", "history"],
+      "gmail.messages": ["search"],
+      "gmail.thread": ["get", "attachments"],
+      "gmail.labels": ["list", "get"],
+      "gmail.drafts": ["list", "get"],
+      "calendar": ["calendars", "acl", "events", "event", "list", "get", "freebusy", "colors", "conflicts", "search", "time", "users", "team"],
+      "drive": ["ls", "search", "get", "download", "permissions", "url", "drives"],
+      "contacts": ["list", "search", "get"],
+      "sheets": ["get", "metadata"],
+      "docs": ["export", "info", "cat", "get"],
+      "tasks": ["lists", "list", "get"],
+      "people": ["me", "get", "search", "relations"],
+      "slides": ["export", "info", "get"]
+    },
+    "write_commands": {
+      "gmail": ["send", "modify", "trash", "untrash", "delete"],
+      "gmail.thread": ["modify"],
+      "gmail.labels": ["create", "modify"],
+      "gmail.batch": ["delete", "modify"],
+      "gmail.drafts": ["create", "update", "delete", "send"],
+      "calendar": ["create", "update", "delete", "respond", "focus-time", "out-of-office", "working-location"],
+      "drive": ["upload", "mkdir", "copy", "move", "delete", "rename", "share", "unshare"],
+      "contacts": ["create", "update", "delete"],
+      "sheets": ["update", "append", "clear", "create", "format", "copy"],
+      "docs": ["create", "copy"],
+      "tasks": ["add", "update", "done", "undo", "delete", "clear"],
+      "slides": ["create", "copy"]
+    }
+  }
+}

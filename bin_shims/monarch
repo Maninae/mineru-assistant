@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Legacy `monarch` shim → `mineru finance ...` (with fall-through).
+#
+# When the mineru CLI is healthy: `monarch accounts` becomes
+# `mineru finance accounts`. When mineru is missing/broken/hanging:
+# exec the live original binary at $MINERU_HOME/bin/monarch
+# so cron, doctor, and skills that call `monarch` on PATH keep
+# working. See bin_shims/README.md for the full rationale and
+# _shim_lib.sh for the shared dispatch.
+#
+# NOTE: the engine does NOT ship bin/monarch (it was an install-local symlink
+# into a sibling monarch-money-cli repo). This fallback only fires when the
+# mineru CLI is unavailable AND a user has provided their own bin/monarch.
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./_shim_lib.sh
+source "$SCRIPT_DIR/_shim_lib.sh"
+
+MINERU_VERB=(finance)
+FALLBACK_BIN=${MINERU_HOME:-$HOME/.mineru}/bin/monarch
+
+shim_run "$@"

@@ -1,0 +1,93 @@
+#!/bin/bash
+# set-passphrase.sh — set (or replace) the {{PERSONA_NAME}} webapp passphrase.
+#
+# Interactive: prompts twice with hidden input, computes SHA-256 of the
+# passphrase, stores the HASH in macOS Keychain under:
+#     service:  $PASSPHRASE_KEYCHAIN_SERVICE  (default below)
+#     account:  $PASSPHRASE_KEYCHAIN_ACCOUNT  (default below)
+#
+# These two env vars are the SAME seam the web app's unlock gate reads
+# (app/unlock_gate.py), so the hash this script writes and the hash the
+# gate checks always line up. Override both to namespace a second install.
+#
+# The plaintext passphrase never touches disk and is unset from shell
+# variables the moment the hash is computed. What is stored in Keychain
+# is a SHA-256 hex (one-way), not the passphrase itself.
+#
+# Having a hash present in Keychain enables the passphrase gate (option B).
+# To turn the gate OFF (revert to option A, open on tailnet — the default),
+# remove the Keychain item:
+#     security delete-generic-password -a "$ACCOUNT" -s "$SERVICE"
+# and restart the webapp.
+
+set -euo pipefail
+
+SERVICE="${PASSPHRASE_KEYCHAIN_SERVICE:-mineru-webapp-passphrase-hash}"
+ACCOUNT="${PASSPHRASE_KEYCHAIN_ACCOUNT:-mineru}"
+
+if [[ ! -t 0 ]] || [[ ! -t 1 ]]; then
+    echo "error: set-passphrase.sh needs an interactive terminal (stdin/stdout must be a TTY)" >&2
+    exit 1
+fi
+
+echo "Set the {{PERSONA_NAME}} webapp passphrase."
+echo "  service : ${SERVICE}"
+echo "  account : ${ACCOUNT}"
+echo
+echo "You'll be prompted twice. Nothing echoes to the screen."
+echo
+
+# `IFS=` preserves any leading/trailing whitespace the user actually typed.
+# `-r` prevents backslash interpretation. `-s` hides the input.
+IFS= read -rs -p "Passphrase: " pass1
+echo
+
+if [[ -z "${pass1}" ]]; then
+    unset pass1
+    echo "error: empty passphrase, aborting" >&2
+    exit 1
+fi
+
+IFS= read -rs -p "Confirm passphrase: " pass2
+echo
+
+if [[ "${pass1}" != "${pass2}" ]]; then
+    unset pass1 pass2
+    echo "error: passphrases did not match, aborting" >&2
+    exit 1
+fi
+
+unset pass2
+
+# `printf '%s'` (no trailing newline) so shasum hashes exactly the passphrase.
+# shasum -a 256 → "<hex>  -", we take the first field.
+hash_hex="$(printf '%s' "${pass1}" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')"
+
+# Wipe the plaintext from the shell IMMEDIATELY after use.
+unset pass1
+
+if [[ "${#hash_hex}" -ne 64 ]]; then
+    echo "error: hash computation failed (unexpected length ${#hash_hex})" >&2
+    exit 1
+fi
+
+# `-U` updates the existing item in place instead of failing on duplicate.
+# The value here is the SHA-256 hex (already a one-way derivation), not the
+# passphrase itself, so its brief appearance in the process argv is not a
+# leak of the secret.
+/usr/bin/security add-generic-password \
+    -a "${ACCOUNT}" \
+    -s "${SERVICE}" \
+    -w "${hash_hex}" \
+    -U
+
+echo
+echo "Passphrase hash stored in Keychain."
+echo
+echo "Restart the webapp for the gate to activate:"
+echo "  launchctl bootout gui/\$(id -u) {{USER_HOME}}/Library/LaunchAgents/{{LAUNCHD_PREFIX}}.webapp.plist 2>/dev/null || true"
+echo "  launchctl bootstrap gui/\$(id -u) {{USER_HOME}}/Library/LaunchAgents/{{LAUNCHD_PREFIX}}.webapp.plist"
+echo
+echo "To turn the gate OFF later (revert to option A — open on tailnet), run:"
+echo "  security delete-generic-password -a ${ACCOUNT} -s ${SERVICE}"
+echo "then restart the webapp again."

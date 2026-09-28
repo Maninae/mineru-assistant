@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Legacy `imsg-firewall` shim → `mineru imessage ...` (with fall-through).
+#
+# When the mineru CLI is healthy: `imsg-firewall chats --limit 10` becomes
+# `mineru imessage chats --limit 10`. When mineru is missing/broken/hanging:
+# exec the live original binary at $MINERU_HOME/bin/imsg-firewall
+# so cron, doctor, and skills that call `imsg-firewall` on PATH keep
+# working. See bin_shims/README.md for the full rationale and
+# _shim_lib.sh for the shared dispatch.
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./_shim_lib.sh
+source "$SCRIPT_DIR/_shim_lib.sh"
+
+MINERU_VERB=(imessage)
+FALLBACK_BIN=${MINERU_HOME:-$HOME/.mineru}/bin/imsg-firewall
+
+shim_run "$@"

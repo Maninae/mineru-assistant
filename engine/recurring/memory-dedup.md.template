@@ -1,0 +1,147 @@
+# Memory Deduplication & Fragmentation Check
+
+You are {{PERSONA_NAME}} running a scheduled job: **Memory Deduplication** (Sunday at 10:30 PM PT weekly). Scope: `memory/` only (not daily logs, not skills, not prompts). Find duplicated, fragmented, or contradictory information across {{USER_NAME}}'s structured memory files and fix what you can.
+
+## Step 0: Check for Conflicting Jobs
+
+Before doing anything, make sure no other consolidation job is running:
+
+```bash
+pgrep -f "weekly-deep-consolidation|consolidate-daily-memories"
+```
+
+If either returns a PID, abort cleanly. Deliver a one-liner to Telegram: "🧹 Skipped: consolidation job in flight." and exit.
+
+## Step 1: Load All Memory Files
+
+```bash
+MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp)
+```
+
+Read the entire dump. This gives you every structured memory file under `{{MEMORY_ROOT}}` concatenated (whatever freeform tree the operator maintains — people, projects, places, etc.).
+
+## Step 2: Scan for Issues
+
+Look for these specific patterns:
+
+### A. Exact Duplicates
+The same factual claim (date, name, number, status) stated in two different files, even if worded differently. Examples:
+- A single hire/start date stated in both `MEMORY.md` and a more specific career file
+- A person's phone number in both their profile and a different file
+- The same origin story written twice (once in a topic file, once in a person file)
+
+**Not a duplicate:** Different prose framing of the same situation. Two files mentioning the same employer in passing context is fine — that's reference, not duplication.
+
+### B. Contradictions
+The same fact with conflicting values across files. Examples:
+- Different dates for the same event
+- Stale info in one file that was updated in another
+- A count or number that changed but only got updated in one place
+
+### C. Orphaned Facts
+Substantial information in a general file (MEMORY.md) that should live in a more specific file but doesn't. Examples:
+- Detailed person info in MEMORY.md that should be in `memory/people/`
+- Project details in a person file that should be in `memory/projects/`
+
+## Step 3: Auto-Fix Certain Items
+
+**Hard limits:**
+- **Maximum 5 auto-fixes per run.** If you find more, fix the 5 most clear-cut and flag the rest.
+- **Never auto-fix these files:** `MEMORY.md`, `IDENTITY.md`, `SOUL.md`, `USER.md` — always flag changes to these for {{USER_NAME}}'s review.
+- **Never create new files.** Only edit existing files.
+- **Never move sections between files** unless it's a verbatim duplicate being removed.
+
+**High-risk domains — FLAG, never auto-merge/auto-edit:** Even if a merge looks mechanical, the job must **not** touch any of the following on its own — if a proposed dedup/merge would alter any of these, downgrade the item to a flagged entry in the report for {{USER_NAME}} to resolve:
+- **Family relationships / structure** (who is married to / sibling of / parent of / child of / aunt-uncle of whom, in-laws, family trees). Never merge two people with similar names (e.g. "Cathy Lee" vs "Kathy Li") — same-sounding names in the same family tree are the exact shape of a real dedup failure where two distinct people were collapsed into one.
+- **Birth, death, and medical dates** (DOBs, delivery dates, procedure dates, diagnosis dates).
+- **People's legal names** (spelling, middle names, maiden vs married surnames, native-script/English name pairings).
+- **Financial account numbers, balances, and dollar amounts** (account IDs, transfer amounts, comp figures, claim totals).
+
+**You may fix without asking** when ALL of these are true:
+- The duplication is clear and mechanical (same factual claim, two places)
+- You can determine which file is the canonical home (the more specific file wins)
+- Removing the duplicate from the less-specific file loses no unique context
+- The fix is a deletion or a one-line edit, not a rewrite
+
+**Verification gate (MANDATORY before each fix, and again before writing):**
+Re-read both files end-to-end. Confirm the canonical file fully captures every nuance of what you're about to remove. If any wording, date, or qualifier differs between the two versions, downgrade to a flagged item instead. Then, before writing the edit to disk, explicitly re-check that the merge does **not** alter any family relationship, person's name, date (birth/death/medical), or financial figure across either file — if any of those would change even incidentally (a reworded relationship, a spelling variant collapsed, a date re-inferred, a dollar amount rounded or dropped), abort the auto-fix and flag it instead. High-risk domains above are non-negotiable: when in doubt, flag.
+
+**Fix strategy:**
+- Keep the fact in the most specific/appropriate file
+- Remove it from the general file (e.g., remove a duplicated career fact from a general profile file if it's fully covered in a dedicated career file under `{{MEMORY_ROOT}}`)
+- For contradictions: keep the most recent/correct version, update the stale one
+
+**Do NOT auto-fix:**
+- Ambiguous cases where both versions add different nuance
+- Large structural reorganizations
+- Anything where you're less than 90% confident
+
+## Step 4: Git Commit
+
+After all auto-fixes, capture what changed:
+
+```bash
+# memory/ and MEMORY.md are symlinks into the profile; git refuses pathspecs through a symlink, so diff the real paths
+git diff --stat -- "$(readlink -f memory)" "$(readlink -f MEMORY.md)"
+```
+
+Include a summary of the diff in the report. Then commit:
+
+```bash
+bash {{MINERU_HOME}}/scripts/git-backup-workspace.sh "memory-dedup-$(date '+%Y-%m-%d')"
+```
+
+This gives {{USER_NAME}} a single-commit revert path if anything was wrong.
+
+Then remove the temporary memory dump from Step 1:
+
+```bash
+# SAFETY (incident 2026-08-05): $MEMORY_DUMP is EMPTY in a fresh shell — env vars do
+# NOT persist across separate tool calls — and `trash ""` trashes the CURRENT directory,
+# i.e. the whole {{MINERU_HOME}} workspace. Guard so only a real temp file is ever trashed.
+[ -n "$MEMORY_DUMP" ] && [ -f "$MEMORY_DUMP" ] && trash "$MEMORY_DUMP" || echo "cleanup skipped: MEMORY_DUMP unset/not-a-file"
+```
+
+## Step 5: Flag Ambiguous Items
+
+For items you can't confidently fix, collect them all and include them in the report. Format each as:
+
+```
+📎 File A vs File B
+File A says: "..."
+File B says: "..."
+Suggested fix: [what you'd do if approved]
+```
+
+{{USER_NAME}} wants to see the full list (top 5 highest-value items surfaced first, then the rest), not a truncated preview — the delivered file IS the message.
+
+## Step 6: Deliver Report
+
+Write the report to `briefs_dedup/dedup-YYYY-MM-DD.md`, then `python3 {{MINERU_HOME}}/scripts/deliver-output.py {{MINERU_HOME}}/briefs_dedup/dedup-YYYY-MM-DD.md`. Per `recurring/README.md` delivery contract: the file is sent verbatim — do NOT reformat, re-summarize, or send a separate top-5 preview alongside it.
+
+**Report file format:**
+
+```
+🧹 Memory Dedup — [date]
+
+Auto-fixed (N items):
+- [one-line summary of each fix]
+
+Needs your input (M total, ordered by clarity — top items first):
+- [formatted as above]
+```
+
+If nothing was found, still deliver: "🧹 Memory scan clean — no duplicates or contradictions found."
+
+If auto-fixes handled everything and nothing needs {{USER_NAME}}'s input, omit the "Needs your input" section.
+
+## Rules
+
+- **Read-only until Step 3.** Don't edit files during scanning.
+- **Never delete a file.** Only edit content within files.
+- **Never create a file.** Only edit existing ones.
+- **Never touch `memory/daily/`.** Those are historical logs, not structured memory.
+- **Preserve all unique information.** Dedup means consolidating, not discarding.
+- **Use `trash` not `rm`** if you ever need to remove a file (you shouldn't).
+- **Keep edits minimal.** This is surgery, not renovation.
+- **A "duplicate" means the same factual claim** (date, name, number, status). Different prose framing of the same situation is NOT a duplicate.

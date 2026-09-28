@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+
+# Session/credentials (stored at ~/.monarch/ but just in case)
+session.json
+*.pickle
+*.pkl
+
+# Secrets
+.env
+*.secret
+credentials*
+token*
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp

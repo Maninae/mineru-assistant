@@ -1,0 +1,12 @@
+# USER.md - About Your Human
+
+Per-install stub. Fill this file in the private overlay with concrete values; the engine ships only the field skeleton so a fork knows the shape.
+
+- **Name:** {{USER_FULL_NAME}}
+- **What to call them:** {{USER_NAME}}
+- **Pronouns:** {{USER_PRONOUNS}}
+- **Timezone:** {{USER_TIMEZONE}}
+- **Location:** {{USER_LOCATION}}
+- **Notes:** _(optional; short lines only. Longer context - work, family, pets, interests - belongs in MEMORY.md under "Key Context" and in the structured `memory/` tree.)_
+
+Everything else about {{USER_NAME}} (household, work, faith, interests, preferences) lives in MEMORY.md and the structured `memory/` subtree. Those are the source of truth; do not duplicate them here.

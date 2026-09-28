@@ -1,0 +1,144 @@
+# Inbox Triage — Safe to Mark Read
+
+## Goal
+
+Surface small clumps of unread emails that are safe to mark as read. {{USER_NAME}} reviews and decides — you NEVER take action on emails yourself.
+
+## Philosophy
+
+**Precision over recall.** Only suggest emails you're 95%+ confident are noise. If you're unsure, skip it. The email isn't going anywhere — it'll come up in a future pass. Mistakes (marking something important as read) are costly. Missing a candidate is free.
+
+## How to Run
+
+### Step 1: Fetch unread candidates (deterministic)
+
+Run the fetch helper. It searches unread mail, dedupes across queries, assigns each thread a stable integer **index**, prints a numbered table for you to classify, and persists the candidates to `cache/triage/` so Step 3 can resolve those indices to verbatim thread IDs.
+
+```bash
+python3 {{MINERU_HOME}}/scripts/triage_ids.py fetch --date "$(date '+%Y-%m-%d')" \
+  --query "is:unread" \
+  --query "is:unread older_than:30d" \
+  --query "is:unread label:CATEGORY_PROMOTIONS"
+```
+
+Pass one or more `--query` to vary the sweep across passes (recent, older, promotions, a specific label like `label:Travel-Points-Deals`) and chip away at the backlog. The helper drops `firewall_blocked` redactions automatically ("keep, don't classify") and searches across ALL labels. Each printed row is `# | DATE | FROM | SUBJECT`; the `#` is the index you reference in Step 3, and the row carries the label metadata you classify on.
+
+### Step 2: Classify using strict criteria
+
+#### 🟢 SAFE to suggest marking as read (ALL conditions must be true):
+
+1. **Sender is automated/no-reply** — not a human writing to {{USER_NAME}} directly
+2. **Purely informational** — no action required, no deadline, no payment due
+3. **Falls into one of these specific categories:**
+
+| Category | Examples | Why safe |
+|----------|----------|----------|
+| **Delivery/shipping confirmations** | Amazon "Delivered:", FedEx, UPS, USPS | Order already arrived |
+| **Return/refund confirmations** | Amazon return processed | Already handled |
+| **Stale one-time codes** | Spotify login code, verification emails >1hr old | Expired, useless |
+| **CI/build/deploy notifications** | GitHub Actions, PR merged, CI passed/failed | Dev noise |
+| **Statement-ready notices** | "Your statement is ready" from banks/cards | Just a ping to go look — not the statement itself |
+| **Marketing/promos with passed dates** | Sales that ended, expired coupons | No longer actionable |
+| **Social platform notifications** | LinkedIn "who viewed", "X liked your post" | Vanity metrics |
+| **App activity summaries** | Weekly digests, "your week in review", usage reports | Retrospective fluff |
+| **Travel points/deals newsletters** | Points-and-miles or deal-of-the-week newsletters {{USER_NAME}} is subscribed to | Marketing newsletters, not actionable |
+| **News newsletters (subject = summary)** | Generic marketing newsletters where subject = full content | Subject line captures the gist. **EXCLUDE any newsletter reserved for the news brief** |
+| **University / alumni mailing lists** | Seminar announcements, student-list postings, discussion-list traffic from an alumni list | Alumni list noise — seminars, student job posts, event announcements |
+| **Post-purchase surveys/feedback requests** | "How was your experience?", "Rate your visit" | Feedback solicitation |
+| **Duplicate alerts** | Multiple identical alerts from same sender/type | Redundant after the first |
+
+#### 🔴 NEVER suggest marking as read — even if automated:
+
+| Category | Why |
+|----------|-----|
+| **Emails from real humans** | Even forwarded through a system — if a person wrote the body, skip it |
+| **Medical** | Your health plan, doctors, pharmacy, lab results, appointments |
+| **Financial requiring action** | Bills DUE, fraud alerts, payment failures, unusual charges, overdraft |
+| **Job/career related** | Recruiters, interview scheduling, application status updates |
+| **Legal or government** | Court, IRS, DMV, any official correspondence |
+| **Emails with uncharacterized attachments** | Could be important documents |
+| **Church/community from real people** | {{CHURCH_NAME}} emails from actual humans (automated ones are fine to evaluate) |
+| **News-digest newsletters reserved for the news brief** | The `news-brief` job consumes these directly — do not triage from here |
+| **Anything <95% confidence** | When in doubt, leave it out |
+
+### Step 3: Pick your clumps, then write the manifest (deterministic — you never type an ID)
+
+First decide the **3-5 clumps you will report** this pass — not exhaustive, just the best safe-to-clear candidates (precision over recall; when in doubt, leave it out). Then write **exactly those clumps** to the manifest, using the same numbers and labels you will show {{USER_NAME}} in Step 4.
+
+Reference candidates by their **index** from Step 1's table (never copy a 16-char thread id). Pass your clumps as inline JSON — each clump has a `label` and the list of candidate `rows` (indices) it covers:
+
+```bash
+python3 {{MINERU_HOME}}/scripts/triage_ids.py write --date "$(date '+%Y-%m-%d')" \
+  --decisions '{"1":{"label":"Alumni seminar list","rows":[3,7,9]},"2":{"label":"Delivery confirmations","rows":[1,4,5]}}'
+```
+
+The helper copies each row's thread id **verbatim** from the candidates file into `briefs_inbox/triage-YYYY-MM-DD-ids.json`, validates every index exists (an out-of-range row fails loud, never silently drops an email), writes the manifest 100% of runs, and echoes the clump + id counts.
+
+**INVARIANT — the manifest is exactly what "clear" acts on.** The clumps you write MUST be the identical set and numbering you report in Step 4: same clump numbers, same labels, nothing extra. `clear all` marks **every** clump in the manifest read, so one extra or renumbered clump means marking threads {{USER_NAME}} never saw — the over-clear bug this whole design exists to prevent. Cross-check the count the helper echoes against the count you are about to report. Thread IDs never appear in the report; they live only in this manifest.
+
+### Step 4: Format output (clean, no IDs)
+
+Report the exact clumps you wrote in Step 3 — same numbering, same labels, same count. Format like:
+
+```
+📬 Inbox Triage — [time of day]
+
+**TLDR:** [N] emails flagged safe across [K] clumps — reply "clear" / "clear 1,3" / "skip".
+
+🟢 Safe to mark read?
+
+1. **Travel deals newsletter** (12 emails, Oct-Feb)
+   Subjects: "Best Points Deals This Week", "Flash Sale", etc.
+
+2. **Alumni seminar list** (8 emails, Feb-Mar)
+   Seminar announcements — NLP talk, systems seminar, etc.
+
+3. **Amazon delivery confirmations** (4 emails, Mar 5-8)
+   All items showing "Delivered"
+
+Total: ~31 emails across 4 clumps
+
+Reply which to mark read (e.g. "all", "1 and 3", "skip"), or ignore.
+```
+
+The `TLDR:` line is load-bearing: the delivery pipeline lifts it into the notification the assistant sees (and the phone's push), so a follow-up "clear" arrives with the count and clump structure already in context. Keep it to the real numbers.
+
+**No thread IDs in the report.** They're in the manifest for when {{USER_NAME}} approves.
+
+### Step 5: Save artifact
+
+Save your complete triage summary to `briefs_inbox/triage-YYYY-MM-DD.md` (use today's local date).
+
+### Step 6: Deliver
+
+Write the triage to `briefs_inbox/triage-YYYY-MM-DD.md` (today's local date), then `python3 {{MINERU_HOME}}/scripts/deliver-output.py {{MINERU_HOME}}/briefs_inbox/triage-YYYY-MM-DD.md`. See `recurring/README.md` — delivery contract.
+
+## Important Rules
+
+1. **NO AUTO-ACTIONS.** Never mark emails as read, archive, delete, or modify anything in this run. Only surface candidates — {{USER_NAME}} approves before any action is taken.
+2. **Precision over recall.** When in doubt, leave it out.
+3. **3-5 clumps max per run.** Keep it digestible, not overwhelming.
+4. **Vary your search.** Alternate between recent and older emails across passes to chip away at the full backlog.
+5. **Group by sender/type**, not individual emails. Show count + date range + sample subjects.
+6. **NO thread IDs in the report, and never hand-type an ID anywhere.** `triage_ids.py write` builds `briefs_inbox/triage-YYYY-MM-DD-ids.json` from candidate indices — you reference rows by index only.
+
+## How to Mark as Read (When {{USER_NAME}} Approves)
+
+{{USER_NAME}}'s reply ("clear", "clear all", "1 and 3", "skip") refers to THIS triage — the notification you received points at the manifest; read it, don't reconstruct. Run the helper against that manifest; it reads the verbatim IDs and marks only the approved clumps read:
+
+```bash
+# "clear all" / "clear"    -> --clumps all
+# "clear 1 and 3" / "1,3"  -> --clumps 1,3
+python3 {{MINERU_HOME}}/scripts/triage_ids.py clear --date YYYY-MM-DD --clumps all
+```
+
+Use the triage **date from the manifest path the pointer gave you** (a "clear" reply often lands a day or more after the triage), NOT today's date. A wrong date fails loud with `FileNotFoundError` rather than clearing the wrong day. Add `--dry-run` first to preview the exact threads without changing anything. The command prints "Marked X/Y threads read" — relay that count to {{USER_NAME}}. The manifest is the source of truth, so "clear" acts on exactly what the triage proposed and nothing else. Never mark unread mail read by any other path (a blanket `is:unread` sweep is the bug that prompted this design). See `prompts/GMAIL.md` for the underlying `gog-firewall gmail` reference.
+
+## Known High-Volume Senders (safe newsletter/marketing)
+
+Fill this in with the confirmed noise senders you actually see on your account (backlog size in parentheses helps prioritize). Example shape:
+- `hello@example-newsletter.com` (Travel deals newsletter) — 80+ unread
+- `list@alumni.example.edu` (University alumni seminar list) — 20+ unread
+- `noreply@vendor.example.com` (Order/shipping notifications) — 10+ unread
+
+Add per install; keep the list short (top few chronic offenders).

@@ -1,0 +1,105 @@
+{
+  "_comment": "EXAMPLE house-scan config (fictional cities). Copy to $MINERU_HOME/config/house_scan_config.json (or point MINERU_HOUSE_SCAN_CONFIG at your copy) and edit. The scanner (scripts/house_scan.py) re-reads it every run, so no launchd reload is needed. Every place, ZIP, school and address the scanner knows comes from this file.",
+
+  "_price_and_size_note": "Hard filters, applied both on the Redfin URL and again after parsing. Missing card stats pass.",
+  "price_ceiling_usd": 1500000,
+  "min_beds": 3,
+  "min_baths": 2,
+  "min_sqft": 1000,
+  "property_types": ["house", "townhouse"],
+
+  "_cities_note": "One Redfin search per city. slug is the Redfin path segment city/<id>/<ST>/<Name>. Redfin resolves ONLY by the numeric id (the tail is cosmetic), so look the id up via Redfin's own location search; a wrong id silently lands on a same-named city elsewhere. The ids below are placeholders. redfin_state_code adds Redfin's /<ST>/ link pattern as a fallback card selector.",
+  "redfin_state_code": "ST",
+  "cities": [
+    {"name": "Maple Hollow", "slug": "00001/ST/Maple-Hollow", "primary": true},
+    {"name": "Cedar Point",  "slug": "00002/ST/Cedar-Point",  "primary": false}
+  ],
+
+  "_neighborhood_policy_note": "THE LOCATION GATE. A listing surfaces only if classify_location() returns include. A listing whose parsed city has no entry under cities is always excluded (Redfin spills neighboring towns into each search). Per-city order, first hit wins: require_city_in_address, include_keywords, exclude_keywords, exclude_zips, include_zips, mixed_zips (-> mixed_zip_default), city default_verdict, global default_verdict. zip_regex is optional; its first capture group is the ZIP (default: the 5 digits after a two-letter state code).",
+  "neighborhood_policy": {
+    "default_verdict": "include",
+    "cities": {
+      "Maple Hollow": {
+        "require_city_in_address": "Maple Hollow",
+        "include_zips": ["00001"],
+        "exclude_zips": ["00003"],
+        "mixed_zips": ["00002"],
+        "mixed_zip_default": "exclude",
+        "include_keywords": ["Old Orchard", "Birch Park"],
+        "exclude_keywords": ["Industrial Flats"],
+        "default_verdict": "exclude"
+      },
+      "Cedar Point": {"require_city_in_address": "Cedar Point", "default_verdict": "include"}
+    }
+  },
+
+  "_property_type_excludes_note": "Second-line filter after the location gate: drop condo units and new-construction plan pages that leak past Redfin's property-type filter. Case-insensitive Python regexes; empty lists fall back to the DEFAULT_* patterns in scripts/house_scan_neighborhoods.py.",
+  "property_type_excludes": {
+    "exclude_units_and_condos": true,
+    "exclude_new_construction_plans": true,
+    "unit_url_patterns": ["/unit-[^/]+/"],
+    "unit_address_patterns": ["#\\s*[A-Za-z0-9\\-]+", "\\bUnit\\s+[A-Za-z0-9\\-]+", "\\bApt\\s+[A-Za-z0-9\\-]+"],
+    "plan_address_patterns": ["^\\s*Plan\\s+\\d+\\s+Plan\\b", "\\bPlan\\b\\s*,"]
+  },
+
+  "_address_blocklist_note": "Personal veto list: case-insensitive substring match on the address. A full address vetoes one listing; a partial street ('Example Ln, Cedar Point') vetoes the whole street.",
+  "address_blocklist": ["12 Example Ln"],
+
+  "_deal_flags_note": "Any one trigger fires a deal flag. Flags are ranking signals and fire on already-seen listings; they are not the gate for new listings (location is).",
+  "deal_flags": {
+    "price_cut_pct": 0.05,
+    "price_per_sqft_below_city_median_pct": 0.08,
+    "stale_days_on_market": 30,
+    "description_keywords": ["as-is", "as is", "estate sale", "probate", "trust sale", "contractor special", "handyman special", "fixer", "tlc", "needs work"],
+    "sash_keywords": ["price reduced", "reduced", "back on market"]
+  },
+
+  "_steep_discount_note": "A listing this far under its city median $/sqft is a red flag, not a top pick: it loses score and lands in the VERIFY bucket.",
+  "steep_discount_flag_pct": 0.25,
+
+  "_median_ppsf_note": "City median list $/sqft, used by the below-median flag and the ranking. Refresh quarterly.",
+  "median_price_per_sqft_by_city": {
+    "Maple Hollow": 900,
+    "Cedar Point": 750
+  },
+
+  "_city_desirability_tiers_note": "Higher = more desirable (fabric + school district). Baseline 0 is neutral; each step adds value_score_weights.city_tier. Cities not listed score 0.",
+  "city_desirability_tiers": {
+    "Maple Hollow": 3,
+    "Cedar Point": 1
+  },
+
+  "_school_note": "Per-listing GreatSchools ratings scraped from the Redfin detail page, cached once per listing. school_verdicts_path (relative to MINERU_HOME) holds researched per-school include/exclude verdicts {\"verdicts\": [{name, cities, verdict, reason, date, source}]}; an explicit verdict beats the numeric floors both ways. The min_*_rating floors are the fallback for unresearched schools (0 = tier not gated); min_school_rating_avg > 0 adds an average floor. Unknown school data never blocks.",
+  "school_verdicts_path": "config/house_scan_school_verdicts.json",
+  "school_signal": {
+    "fetch_schools": true,
+    "min_school_rating_avg": 0,
+    "min_elementary_rating": 7,
+    "min_middle_rating": 7,
+    "min_high_rating": 0,
+    "max_fetches_per_run": 8,
+    "school_extraction_timeout_seconds": 45
+  },
+
+  "_ranking_note": "Score = city_tier * tier + schools * (school_avg - 5) + capped below-median bonus - steep-discount penalty + price_cut * drop + dom_bonus * min(dom, 60) + sqft_bonus * max(0, sqft - 1500). See score_listing() in scripts/house_scan_neighborhoods.py.",
+  "value_score_weights": {
+    "city_tier": 4.0,
+    "schools": 1.2,
+    "below_median_ppsf": 6.0,
+    "price_cut": 4.0,
+    "dom_bonus": 0.02,
+    "sqft_bonus": 0.001
+  },
+
+  "_digest_caps_note": "Per-bucket caps. Aim for a handful of listings per week.",
+  "max_new_per_digest": 3,
+  "max_reduced_per_digest": 3,
+  "max_flagged_per_digest": 3,
+  "max_verify_per_digest": 2,
+  "max_listings_per_digest": 15,
+
+  "_paths_note": "brief_dir is relative to MINERU_BRIEFS_ROOT; seen_state_path and log_path to MINERU_HOME. browser_bin / deliver_bin are optional (defaults: $MINERU_HOME/bin/browser, $MINERU_HOME/scripts/deliver-output.py).",
+  "brief_dir": "briefs_house_scan",
+  "seen_state_path": "cache/house_scan_seen.json",
+  "log_path": "logs/house-scan"
+}

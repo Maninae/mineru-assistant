@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  {{PERSONA_NAME}} web app launchd template — NOT loaded automatically.
+  This runs the read-only tailnet web app persistently so `tailscale serve`
+  always has a live backend to proxy. Load only after {{USER_NAME}} approves go-live:
+
+    cp {{MINERU_HOME}}/app/deploy/{{LAUNCHD_PREFIX}}.webapp.plist {{USER_HOME}}/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) {{USER_HOME}}/Library/LaunchAgents/{{LAUNCHD_PREFIX}}.webapp.plist
+    launchctl enable gui/$(id -u)/{{LAUNCHD_PREFIX}}.webapp
+
+  Teardown:
+    launchctl bootout gui/$(id -u)/{{LAUNCHD_PREFIX}}.webapp
+    trash {{USER_HOME}}/Library/LaunchAgents/{{LAUNCHD_PREFIX}}.webapp.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LAUNCHD_PREFIX}}.webapp</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>{{MINERU_HOME}}/app/server.py</string>
+        <string>--port</string>
+        <string>{{WEBAPP_PORT}}</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>{{MINERU_HOME}}/app</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>{{MINERU_HOME}}/logs/webapp/webapp.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{MINERU_HOME}}/logs/webapp/webapp.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!--
+          Per-profile isolation for the web app (step-5 audit, Finding 8).
+          Without these, a second profile's webapp would bind the OWNER's
+          port, serve the OWNER's library, and share ONE passphrase +
+          Web Push VAPID Keychain slot across every profile on the box.
+        -->
+        <key>MINERU_HOME</key>
+        <string>{{MINERU_HOME}}</string>
+        <key>MINERU_WEBAPP_PORT</key>
+        <string>{{WEBAPP_PORT}}</string>
+        <key>PASSPHRASE_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>PASSPHRASE_KEYCHAIN_SERVICE</key>
+        <string>{{KEYCHAIN_ACCOUNT}}-webapp-passphrase-hash</string>
+{{#if TAILSCALE_HOSTNAME}}
+        <key>MINERU_TAILNET_HOSTNAME</key>
+        <string>{{TAILSCALE_HOSTNAME}}</string>
+{{/if}}
+{{#if WEBAPP_SERVE_HOSTNAMES}}
+        <key>MINERU_SERVE_HOSTNAMES</key>
+        <string>{{WEBAPP_SERVE_HOSTNAMES}}</string>
+{{/if}}
+        <key>WEBPUSH_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>WEBPUSH_KEYCHAIN_SERVICE</key>
+        <string>{{KEYCHAIN_ACCOUNT}}-webpush-vapid-private</string>
+    </dict>
+</dict>
+</plist>

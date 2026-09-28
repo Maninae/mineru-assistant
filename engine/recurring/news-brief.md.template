@@ -1,0 +1,175 @@
+# Local News Brief (Rotating Clusters)
+
+News briefing with a 3-topic rotation, one topic per run. The shipped schedule is Mon/Wed/Fri at 11:00, so a week covers one full rotation; run it daily if you prefer (edit the launchd template's StartCalendarInterval).
+
+## Cluster Rotation
+
+The system rotates through 3 topic clusters:
+
+| Day | Cluster | Focus |
+|-----|---------|-------|
+| 1 | Urbanism & Family | Housing, transit, pedestrian safety, local government, local business, education |
+| 2 | Tech & AI | Major labs + broader landscape (agentic, new labs/models), regulation, CV/perception research |
+| 3 | Energy & Climate | Solar, batteries, EVs, nuclear, wind, grid/storage, EPA, climate |
+
+Rotation is continuous — no regard for day of week. State tracked in `briefs_news/rotation-state.json`.
+
+---
+
+## Step 1: Fetch Fresh Results
+
+Run the cluster-aware fetch script:
+
+```bash
+{{MINERU_HOME}}/briefs_news/fetch-news.sh
+```
+
+This:
+- Determines today's cluster from rotation state
+- Queries Brave Search with 1.5s delays
+- Saves results to `briefs_news/raw/YYYY-MM-DD.json`
+- Advances the rotation state
+
+## Step 2: Read Today's Results
+
+Read the raw results file:
+- `briefs_news/raw/YYYY-MM-DD.json` (today's date)
+
+Note which cluster was fetched (stored in the JSON).
+
+## Step 3: Deduplication
+
+Read `briefs_news/seen.json` for recently covered stories. Use your judgment to drop:
+- Stories substantially the same as recent coverage
+- Same story from different sources (pick the best one)
+- Updates that don't add meaningful new info
+
+**Cross-stream dedup is critical.** Apply dedup across both digest items and main stories — the same event from different angles is still the same event (e.g., "Anthropic raises $65B" as a digest headline and "Anthropic surpasses OpenAI in valuation" as a main story = one funding round, pick one).
+
+## Step 4: Select Top Stories
+
+Pick **TOP 3 stories** that best represent today's cluster focus.
+
+**Cluster-specific guidance:**
+
+**Day 1 (Urbanism & Family):**
+- Prioritize {{USER_LOCATION}} hyperlocal — stories from your local paper and neighborhood news outlets
+- City council, planning commission decisions, neighborhood-level news
+- Housing policy, zoning battles, YIMBY wins/losses
+- Pedestrian/bike safety — focus on policy response, not just accidents
+- Local business — restaurant openings/closings, local community news
+- California education policy
+
+**Day 2 (Tech & AI):**
+- Major labs (Anthropic, OpenAI, Google) AND the broader landscape — new labs, frontier model releases from anyone (Microsoft, Meta, xAI, Mistral, etc.), agentic AI developments
+- Regulation and policy
+- Research: CV/perception, diffusion models, RL — especially work close to {{USER_NAME}}'s domain
+- Keep it substantive — skip fluff announcements
+- **Priority Threads accounts** (configure per install; the two below are an example of AI-news accounts worth following) — Fetch each profile's latest posts BEFORE writing the brief, then prioritize that content in the story mix. Use `bin/browser` (see the `mineru_browser` skill for the full pattern):
+  ```bash
+  # For each profile: open -> snapshot -> extract the recent posts from the snapshot tree
+  {{MINERU_HOME}}/bin/browser action=open targetUrl="https://www.threads.net/@sung.kim.mw"
+  {{MINERU_HOME}}/bin/browser action=snapshot targetId=<returned tab id>
+  # Repeat for each account, then close the tabs.
+  ```
+  Accounts:
+  - @sung.kim.mw (https://www.threads.net/@sung.kim.mw) — Sung Kim
+  - @omarsar0 (https://www.threads.net/@omarsar0) — Elvis Saravia (DAIR.AI)
+
+  If a snapshot returns an empty or login-walled feed, note it and move on — do not block the brief.
+- **ALSO READ: `briefs_news/raw/YYYY-MM-DD-research.json`** (fetched only on Day 2 by `fetch-research.sh` — the file does NOT exist on Days 1 or 3; don't hunt for it) — contains:
+  - HuggingFace Daily Papers (community upvoted, highest signal)
+  - Reddit r/MachineLearning (top discussions, paper commentary)
+  - Hacker News AI/ML stories (tech community signal)
+- Prioritize papers/posts with high upvotes, citations, or engagement
+- Cross-reference: if something appears in multiple sources, it's likely important
+
+**Day 3 (Energy & Climate):**
+- Solar, battery, EV developments (US + China)
+- Nuclear, wind, offshore
+- Grid storage and infrastructure — integration challenges, smart grid
+- EPA, environmental policy
+- Climate resilience, carbon emissions
+- Both good news and concerning trends
+
+## Step 5: News-Digest Email Section
+
+Fetch any unread issues of your morning news-digest newsletter(s) and extract key highlights. Configure the sender / label per install (a common shape: a curated daily email like `Closer`, `Mobility`, or any comparable topical newsletter — pick the sender(s) you actually read).
+
+Search via gog-firewall (per the GMAIL.md rule — the Gmail MCP connector is retired):
+- `{{MINERU_HOME}}/bin/gog-firewall gmail search "from:your-digest-sender.example.com is:unread label:YourDigestLabel" --max 5 --json`
+- If a long body comes back redacted (`firewall_blocked`), skip that newsletter this run and still mark it read in Step 6.
+
+For each unread digest email:
+1. Fetch the full body: `{{MINERU_HOME}}/bin/gog-firewall gmail thread get <threadId> --json`
+2. Extract the 2-3 most interesting bullet points / headlines
+3. Note the newsletter section name (e.g. a per-topic sub-newsletter)
+
+After extracting, **mark those digest emails as read**:
+```bash
+{{MINERU_HOME}}/bin/gog-firewall gmail thread modify <thread_id> --remove UNREAD --no-input
+```
+
+Include these as a dedicated **📰 Digest** section at the end of the brief (see formatting in Step 6).
+
+If no unread digest emails, skip this section entirely.
+
+## Step 6: Format Brief
+
+**Output format:**
+- Start with cluster indicator: "🏙️ **Urbanism & Family Day**" (or relevant emoji/name)
+- Numbered list with emoji headers
+- Brief description for each (2-3 sentences max)
+- Include area tag where relevant: `[{{USER_LOCATION}}]` / `[<metro area>]` / `[<state>]` / `[US]` — do NOT backslash-escape the brackets (write `[US]`, not `\[US\]`)
+- **Headline is the link** — wrap the story title in a markdown hyperlink with bold: `[**Story headline here**](URL)`. No separate "Source" link. The delivery script converts markdown to Telegram HTML automatically — do NOT write raw HTML tags in the brief file (they'll get escaped and break).
+- If digest emails were found, add a final **📰 Digest** section. Format for Telegram readability — bold headline per item, one short context line, whitespace between:
+  ```
+  📰 **Digest**
+
+  📈 Markets
+
+  **S&P reverses -1.5% to close +0.8%** — Bond yields eased after soft jobs data.
+
+  **Live Nation settles DOJ antitrust suit** — Keeps Ticketmaster, avoids breakup.
+
+  🚛 Mobility
+
+  **LA Metro hits post-pandemic ridership high** — 1.1M daily trips.
+  ```
+  Each item gets a **bold headline** and one short context line (dash-separated). Sub-newsletter name on its own line with a category emoji. 2-3 items per newsletter. No bullet characters — just bold headlines with whitespace. Digest items are subject to the same cross-stream dedup from Step 3.
+
+**Cluster emojis:**
+- Day 1: 🏙️ Urbanism & Family
+- Day 2: 🤖 Tech & AI
+- Day 3: ⚡ Energy & Climate
+
+## Step 7: Update Tracking
+
+After writing the brief, update `briefs_news/seen.json` under today's date key. **Include both main stories AND digest items** — both streams feed into dedup:
+
+```json
+{
+  "by_date": {
+    "2026-02-26": [
+      {"url": "https://...", "title": "Story title", "summary": "One-liner"},
+      {"url": "", "title": "Digest: Headline here", "summary": "One-liner from digest"}
+    ]
+  }
+}
+```
+
+Then run the prune script:
+```bash
+{{MINERU_HOME}}/briefs_news/prune-seen.sh
+```
+
+## Preferences
+
+- **Location:** {{USER_LOCATION}}, CA
+- **Timezone:** America/Los_Angeles
+
+---
+
+## Step 8: Deliver
+
+Write the brief to `briefs_news/briefs/YYYY-MM-DD.md`, then `python3 {{MINERU_HOME}}/scripts/deliver-output.py {{MINERU_HOME}}/briefs_news/briefs/YYYY-MM-DD.md`. See `recurring/README.md` — delivery contract.

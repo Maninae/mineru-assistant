@@ -1,0 +1,44 @@
+# User-defined custom verbs (P3-08 first instance).
+#
+# One entry per registered verb. The `mineru custom` sub-app owns writes
+# here (`add`, `remove`); this seed file is hand-maintained for the
+# journal-export migration. The registry loader treats a missing file as
+# an empty registry, so removing this seed is a valid state.
+#
+# Schema per entry lives in mineru_cli.custom.registry.CustomVerbEntry:
+#   name          - lowercase-kebab; must not collide with any built-in verb
+#   description   - one-line for --help
+#   command       - argv list; `{args}` (as a standalone token) expands to
+#                   the trailing pass-through args from `mineru <name> ...`
+#   cwd           - absolute path; defaults to profile.workspace_absolute
+#   schedule      - informational cron string until Phase 4's `mineru cron
+#                   install` materializes the plist(s) into launchd
+#   deploy_notes  - free text shown by `mineru custom show`; the operator's
+#                   pointer to the launchd label / plist path they own
+#
+# ⚠️ SECURITY ⚠️
+# The file is 0600 when the registry itself writes it (`atomic_write_600`),
+# but a git-checked-in seed inherits the repo's default mode. When the
+# registry mutates this file the mode snaps back to 0600. Do not put any
+# secret in a `command` here; commands run as the invoking user with the
+# usual shell semantics. Secrets belong in the Keychain per SECURITY.md.
+
+verbs:
+  - name: journal-export
+    description: "Export your Apple Notes Daily Journals folder to plain text (atomic swap into journal_exports/)."
+    command:
+      - /Users/example/.mineru/scripts/export-journals.py
+      - "{args}"
+    cwd: /Users/example/.mineru
+    schedule: "45 0 * * *"
+    deploy_notes: |
+      Nightly launchd job at 00:45 America/Los_Angeles.
+      Target plist: ~/Library/LaunchAgents/com.mineru.export-journals.plist
+      Matches the "Journal Pre-Export" row in prompts/TECHNICAL.md's
+      recurring-jobs schedule (12:45 AM daily).
+
+      Phase 4's `mineru cron install` will materialize the plist from
+      this entry's `schedule` + the profile's `launchd_label_prefix`.
+      Until then, drop the plist by hand and point ProgramArguments at
+      `command` above. Optional single integer arg = number of recent
+      notes to export (defaults to 30 inside the script).

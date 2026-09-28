@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f2e26" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#fbe3b8" media="(prefers-color-scheme: light)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Mineru" />
+  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon-180.png" />
+  <link rel="stylesheet" href="/static/css/tokens.css" />
+  <link rel="stylesheet" href="/static/css/lock.css" />
+  <title>Mineru</title>
+</head>
+<body class="lock-body">
+  <main class="lock-card" aria-labelledby="lock-title">
+    <div class="lock-mark" aria-hidden="true">🦊</div>
+    <h1 class="lock-title" id="lock-title">Mineru</h1>
+    <p class="lock-sub">Enter passphrase to continue.</p>
+    <form class="lock-form" id="lock-form" autocomplete="off" novalidate>
+      <label class="lock-label" for="passphrase">Passphrase</label>
+      <input
+        type="password"
+        class="lock-input"
+        id="passphrase"
+        name="passphrase"
+        autocomplete="current-password"
+        spellcheck="false"
+        autocapitalize="off"
+        autocorrect="off"
+        required
+        autofocus
+      />
+      <button type="submit" class="lock-button" id="lock-button">Unlock</button>
+    </form>
+    <div class="lock-message" id="lock-message" role="status" aria-live="polite"></div>
+  </main>
+  <script src="/static/js/lock.js"></script>
+</body>
+</html>

@@ -1,0 +1,620 @@
+/*
+ * Shell + layout for the classic 3-pane mail-client shape.
+ *
+ * Desktop (>=900px):
+ *   grid-template-columns: var(--sidebar-width) var(--list-width) 1fr
+ *   Three persistent columns, always visible. Hairline dividers between them.
+ *
+ * Mobile (<900px):
+ *   Only one column is display:flex at a time; the shell toggles between
+ *   `.stack-level-0` (folders / sidebar), `.stack-level-1` (list), and
+ *   `.stack-level-2` (reader) by the router based on the current view.
+ *   A bottom tabbar still switches sections.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100vh;
+  /* Mail theme is flat: solid --bg, no radial wallpaper. Legacy themes still
+     get their wallpaper via the fallback :root variables. */
+  background: var(--bg);
+  background-attachment: fixed;
+}
+
+/* iOS status-bar scrim (kept for legacy themes; mail is light so the
+   default status-bar-style="default" renders dark glyphs on white). */
+body::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0);
+  background: var(--status-strip-tint);
+  pointer-events: none;
+  z-index: 30;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+.hidden,
+[hidden] {
+  display: none !important;
+}
+
+/* --- Shell grid (desktop) ------------------------------------------------- */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) var(--list-width) 1fr;
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* --- Sidebar (folders + coordinator heartbeat) --------------------------- */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--divider);
+  padding:
+    calc(14px + env(safe-area-inset-top, 0))
+    10px
+    calc(12px + env(safe-area-inset-bottom, 0))
+    calc(10px + env(safe-area-inset-left, 0));
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 10px;
+}
+.sidebar-header .app-mark {
+  font-size: 22px;
+}
+.sidebar-header .app-name {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-size: var(--font-size-card);
+  color: var(--text-primary);
+}
+
+/* Inbox row (the mailbox-glyph + "Inbox" + unread pill row at the top of the
+   sidebar). Visually distinct from feed rows so it reads as the parent bucket. */
+.sidebar-inbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.sidebar-inbox-row:hover {
+  background: var(--surface-muted);
+}
+.sidebar-inbox-row.active {
+  background: var(--surface-raised);
+}
+.sidebar-inbox-glyph {
+  font-size: 18px;
+  color: var(--accent);
+  width: 22px;
+  text-align: center;
+}
+.sidebar-inbox-label {
+  flex: 1;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+}
+.sidebar-inbox-count {
+  min-width: 22px;
+  padding: 0 8px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--badge-calm);
+  color: var(--badge-calm-text);
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Feed groups (each group carries a small uppercase section label
+   followed by the feed rows in that group). */
+.feed-groups {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 0;
+  scrollbar-width: thin;
+}
+.feed-group {
+  display: flex;
+  flex-direction: column;
+}
+.feed-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  /* On the #ececee sidebar, --text-muted misses AA (4.21:1). --sidebar-text-muted
+     is defined per-theme to keep this label at ≥4.5:1 without darkening every
+     other muted surface. */
+  color: var(--sidebar-text-muted);
+  letter-spacing: 0.04em;
+  padding: 10px 12px 4px;
+  text-transform: none;
+}
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.feed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+  min-height: 28px;
+}
+.feed-row:hover {
+  background: var(--surface-muted);
+}
+.feed-row.active {
+  background: var(--surface-raised);
+}
+.feed-row .feed-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--status-fresh);
+}
+.feed-row .feed-dot.stale { background: var(--status-stale); }
+.feed-row .feed-dot.failed { background: var(--status-failed); }
+.feed-row .feed-dot.neutral { background: var(--status-neutral); }
+.feed-row .feed-emoji {
+  font-size: 15px;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+.feed-row .feed-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feed-row .feed-count {
+  font-size: 12px;
+  /* Sidebar-safe muted (--text-muted misses AA on the #ececee sidebar). */
+  color: var(--sidebar-text-muted);
+  font-weight: 500;
+}
+/* When feed has unread, render the small orange envelope instead of the
+   count. JS sets .feed-envelope on the badge when unread>0. */
+.feed-row .feed-envelope {
+  color: var(--unread-envelope);
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* Sidebar footer: bottom-pinned nav to non-Inbox tabs + coordinator heartbeat */
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--divider);
+  margin-top: 4px;
+}
+.sidebar-footer-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sidebar-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+  min-height: 28px;
+}
+.sidebar-nav-btn:hover { background: var(--surface-muted); }
+.sidebar-nav-btn.active { background: var(--surface-raised); }
+.sidebar-nav-btn .sidebar-nav-emoji {
+  font-size: 15px;
+  width: 18px;
+  text-align: center;
+}
+.sidebar-nav-btn .sidebar-nav-label {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+.sidebar-nav-btn .sidebar-nav-hint {
+  font-size: 11px;
+  color: var(--sidebar-text-muted);
+}
+.coordinator-heartbeat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 4px;
+  font-size: 11px;
+  /* Same reason as .feed-group-label: sidebar-muted is the sidebar-safe muted. */
+  color: var(--sidebar-text-muted);
+}
+.coordinator-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--status-fresh);
+  flex-shrink: 0;
+}
+.coordinator-dot.stale { background: var(--status-stale); }
+.coordinator-dot.failed { background: var(--status-failed); }
+.coordinator-label { font-weight: 600; color: var(--text-primary); }
+.coordinator-value { color: var(--sidebar-text-muted); }
+
+/* --- List column (middle: message list) ---------------------------------- */
+
+.list-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--divider);
+  background: var(--bg);
+}
+.list-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding:
+    calc(14px + env(safe-area-inset-top, 0))
+    18px
+    12px
+    18px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--bg);
+  min-height: 52px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+.list-header .back-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 20px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+}
+.list-header .back-button:not([hidden]) { display: inline-flex; }
+.list-header .list-title {
+  font-size: var(--font-size-pane);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-header .list-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.list-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0;
+}
+
+/* --- Reader column (right: brief/file reader) --------------------------- */
+
+.reader-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+.reader-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding:
+    calc(14px + env(safe-area-inset-top, 0))
+    28px
+    12px
+    28px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--bg);
+  min-height: 52px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+.reader-header .back-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 20px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  margin-top: 2px;
+}
+.reader-header .back-button:not([hidden]) { display: inline-flex; }
+.reader-header-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.reader-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.reader-title {
+  font-size: var(--font-size-pane);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.reader-status-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--tag-alert-bg);
+  color: var(--tag-alert-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.reader-status-pill.info {
+  background: var(--tag-info-bg);
+  color: var(--tag-info-text);
+}
+.reader-subline {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.reader-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.reader-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px clamp(24px, 5vw, 56px) 96px;
+  background: var(--bg);
+}
+
+/* Circular action-button used in the reader header (mark read/unread,
+   open-raw, etc.). Kept small, hairline-outlined, neutral. */
+.reader-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--divider);
+  color: var(--text-secondary);
+  background: var(--bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.reader-action-btn:hover {
+  border-color: var(--divider-strong);
+  color: var(--text-primary);
+  background: var(--surface-muted);
+}
+
+/* Mobile tabbar hidden on desktop */
+.mobile-tabbar {
+  display: none;
+}
+
+/* --- Mobile shell (< 900px): drill-down stack ---------------------------- */
+
+@media (max-width: 899px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: 100vh;
+    height: 100vh;
+  }
+  /* Mobile: only ONE column visible at a time. The router picks which via
+     the .stack-level-N class on .app-shell. Falls back to level-1 (list). */
+  .sidebar,
+  .list-column,
+  .reader-column {
+    grid-row: 1;
+    grid-column: 1;
+    display: none;
+    border-right: 0;
+  }
+  .app-shell.stack-level-0 .sidebar { display: flex; }
+  .app-shell.stack-level-1 .list-column { display: flex; }
+  .app-shell.stack-level-2 .reader-column { display: flex; }
+  /* Default (no class yet): show the list column so the app never renders
+     an empty phone screen while the router is still figuring things out. */
+  .app-shell:not(.stack-level-0):not(.stack-level-1):not(.stack-level-2) .list-column {
+    display: flex;
+  }
+
+  .sidebar {
+    padding:
+      calc(14px + env(safe-area-inset-top, 0))
+      calc(12px + env(safe-area-inset-right, 0))
+      calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0) + 16px)
+      calc(12px + env(safe-area-inset-left, 0));
+  }
+  .list-body,
+  .reader-body {
+    padding-bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0) + 32px);
+  }
+  .reader-body {
+    padding-left: 18px;
+    padding-right: 18px;
+    padding-top: 18px;
+  }
+  .list-header,
+  .reader-header {
+    padding-left: calc(14px + env(safe-area-inset-left, 0));
+    padding-right: calc(14px + env(safe-area-inset-right, 0));
+  }
+  .reader-title { font-size: 18px; }
+
+  .mobile-tabbar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0));
+    padding:
+      6px
+      calc(10px + env(safe-area-inset-right, 0))
+      calc(env(safe-area-inset-bottom, 0) + 6px)
+      calc(10px + env(safe-area-inset-left, 0));
+    background: var(--tabbar-bg, #ffffff);
+    border-top: 1px solid var(--divider);
+    z-index: 15;
+  }
+  .mobile-tabbar::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0));
+    height: 14px;
+    pointer-events: none;
+    background: linear-gradient(to top, var(--tabbar-bg, #ffffff) 0%, transparent 100%);
+    z-index: 14;
+  }
+  .mobile-tabbar .tab-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 4px;
+    text-align: center;
+    color: var(--text-secondary);
+  }
+  .mobile-tabbar .tab-button.active { color: var(--accent); }
+  .mobile-tabbar .tab-button .tab-emoji {
+    font-size: 20px;
+  }
+  .mobile-tabbar .tab-button .tab-label {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  /* iOS HIG tap targets: every touch affordance must be ≥44×44. Glyph size
+     stays the same; the button expands its hit area. Desktop keeps its
+     compact hairline chrome (this rule is inside the mobile @media). */
+  .list-header .back-button,
+  .reader-header .back-button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 6px;
+  }
+  .reader-header-actions .reader-action-btn {
+    width: 44px;
+    height: 44px;
+    /* Keep the visible circle small by drawing the border only via a
+       pseudo-frame? Simpler: just take the full 44 and enlarge the glyph
+       slightly for balance. */
+    font-size: 16px;
+  }
+  .list-header-actions .icon-button,
+  .list-header-actions .mark-all-button {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+}
+
+/* --- Focus ring --------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

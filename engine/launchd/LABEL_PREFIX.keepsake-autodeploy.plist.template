@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LAUNCHD_PREFIX}}.keepsake-autodeploy</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/python3</string>
+        <string>{{MINERU_HOME}}/scripts/keepsake-autodeploy.py</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>TimeOut</key>
+    <integer>600</integer>
+
+    <key>WorkingDirectory</key>
+    <string>{{MINERU_HOME}}</string>
+
+    <key>StandardOutPath</key>
+    <string>{{MINERU_HOME}}/logs/keepsake-autodeploy/launchd-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{MINERU_HOME}}/logs/keepsake-autodeploy/launchd-stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{{USER_HOME}}/.local/bin</string>
+        <key>HOME</key>
+        <string>{{USER_HOME}}</string>
+        <key>MINERU_HOME</key>
+        <string>{{MINERU_HOME}}</string>
+        <key>MINERU_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>MINERU_INJECT_QUEUE_DIR</key>
+        <string>{{MINERU_INJECT_QUEUE_DIR}}</string>
+    </dict>
+</dict>
+</plist>

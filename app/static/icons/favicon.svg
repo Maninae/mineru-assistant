@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="25%" r="90%">
+      <stop offset="0%" stop-color="#1c5240"/>
+      <stop offset="100%" stop-color="#061713"/>
+    </radialGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)"/>
+  <!-- Fox silhouette: two ear triangles + rounded head. Single-color mark
+       so the wordmark stays one family (no two-tone). -->
+  <path d="M32 14 L20 24 L18 20 Z" fill="#79e2b3"/>
+  <path d="M32 14 L44 24 L46 20 Z" fill="#79e2b3"/>
+  <path d="M22 24 Q32 20 42 24 Q46 32 42 40 Q37 46 32 46 Q27 46 22 40 Q18 32 22 24 Z" fill="#79e2b3"/>
+  <circle cx="27" cy="32" r="1.7" fill="#061713"/>
+  <circle cx="37" cy="32" r="1.7" fill="#061713"/>
+  <path d="M30 38 Q32 40 34 38" stroke="#061713" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+</svg>

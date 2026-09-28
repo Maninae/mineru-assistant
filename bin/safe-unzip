@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+"""safe-unzip — security-hardened zip extraction shim.
+
+Bootstraps sys.path to the mineru workspace root so the `scripts.safezip`
+package can be imported, then hands off to `scripts.safezip.cli.main()`.
+All logic (validation, extraction, manifest rendering) lives in the package;
+this file is intentionally minimal so future changes never require editing
+two locations.
+"""
+import sys
+from pathlib import Path
+
+# Add the mineru workspace root (parent of bin/) to sys.path so
+# `scripts.safezip` resolves. Mirrors the bootstrap pattern used by bin/msearch.
+MINERU_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(MINERU_ROOT))
+
+from scripts.safezip.cli import main
+
+if __name__ == "__main__":
+    sys.exit(main())

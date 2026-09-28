@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LAUNCHD_PREFIX}}.telegram-daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>-m</string>
+        <string>landline</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>{{MINERU_HOME}}</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{USER_HOME}}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>{{USER_HOME}}</string>
+        <key>TZ</key>
+        <string>{{USER_TIMEZONE}}</string>
+        <key>PYTHONPATH</key>
+        <string>{{USER_DEV_ROOT}}/claude-landline</string>
+        <key>MINERU_HOME</key>
+        <string>{{MINERU_HOME}}</string>
+        <key>MINERU_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>MINERU_INJECT_QUEUE_DIR</key>
+        <string>{{MINERU_INJECT_QUEUE_DIR}}</string>
+    </dict>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>ExitTimeOut</key>
+    <integer>45</integer>
+
+    <key>StandardOutPath</key>
+    <string>{{MINERU_HOME}}/logs/telegram-daemon/stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{MINERU_HOME}}/logs/telegram-daemon/stderr.log</string>
+</dict>
+</plist>

@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""msearch — Mineru Memory Search CLI.
+
+Fast local memory search across the entire memory tree, reports, and tagged
+markdown files. Three modes of operation:
+
+  keyword   Instant tag + fulltext search. Searches YAML frontmatter tags and
+            greps file content. Returns file paths, matched tags, and matched
+            lines with line numbers. Best for: exact terms, abbreviations,
+            names, any known string.
+
+  tags      Browse and filter the full tag index. Shows all tags across every
+            tagged file with optional file counts. Pipe to grep to filter.
+
+  query     Natural language → tag suggestions via local Ollama (gemma3:12b).
+            Translates colloquial questions into relevant tags, then searches
+            the tag index. Best for: "that thing about X" style queries.
+
+Examples:
+  msearch keyword "vendor"                     # exact tag + content search
+  msearch keyword "alice"       --pretty       # human-readable output
+  msearch tags --count --pretty                # browse all tags by frequency
+  msearch tags --count --pretty | grep "trip"  # filter tags
+  msearch query "travel research from last spring" # semantic → tag → file search
+  msearch query "that warranty claim we filed" --top 10
+
+Architecture:
+  - Tag index from YAML frontmatter across the full memory/ tree (recursive)
+    and reports/. Files are keyed by workspace-relative path so distinct files
+    with the same basename (e.g. multiple profile.md, README.md) never collide.
+  - Content search via grep (no embeddings, no API, no quota)
+  - Semantic layer via local Ollama gemma3:12b (no external dependencies)
+  - Index cached with TTL at memory/tags-index.json
+"""
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+# Add src/ to path so msearch package is importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from msearch.config import (
+    CACHE_TTL_SECONDS,
+    DEFAULT_TOP_N,
+    OLLAMA_MODEL,
+    OLLAMA_URL,
+    resolve_paths,
+)
+from msearch.index_builder import build_index, load_or_build
+from msearch.keyword_searcher import search as keyword_search
+from msearch.semantic_ranker import suggest_tags
+
+
+def main():
+    # Global flags shared across all subcommands
+    global_parser = argparse.ArgumentParser(add_help=False)
+    global_parser.add_argument("--json", dest="output_json", action="store_true", default=True,
+                               help="JSON output (default)")
+    global_parser.add_argument("--pretty", action="store_true", help="Human-readable output")
+    global_parser.add_argument("--workspace", type=str, default=None, help="Override workspace root")
+    global_parser.add_argument("--no-cache", action="store_true", help="Force index rebuild")
+    global_parser.add_argument("--timing", action="store_true", help="Print elapsed time per phase")
+
+    parser = argparse.ArgumentParser(
+        prog="msearch",
+        description="Mineru Memory Search — fast local search across the full memory/ tree (recursive), reports, "
+                    "and tagged markdown files. "
+                    "Use 'keyword' for exact matches, 'tags' to browse the index, 'query' for natural language.",
+        epilog="Tip: Run 'msearch keyword TERM' first for speed. Use 'msearch query TEXT' when you don't know the exact words. "
+               "Combine both for maximum recall.",
+        parents=[global_parser],
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    kw_parser = sub.add_parser(
+        "keyword",
+        help="Tag + fulltext search (instant, <100ms)",
+        description="Search YAML frontmatter tags AND file content via grep. "
+                    "Case-insensitive, partial match. Returns file paths, matched tags, "
+                    "and content lines with line numbers.",
+        parents=[global_parser],
+    )
+    kw_parser.add_argument("term", help="Search term (e.g. 'vendor', 'alice', 'CG')")
+
+    tags_parser = sub.add_parser(
+        "tags",
+        help="List/browse all tags in the index",
+        description="Show all YAML frontmatter tags across the full memory/ tree (recursive) and reports. "
+                    "Use --count to sort by frequency. Pipe to grep to filter.",
+        parents=[global_parser],
+    )
+    tags_parser.add_argument("--count", action="store_true", help="Show file counts per tag, sorted by frequency")
+
+    query_parser = sub.add_parser(
+        "query",
+        help="Semantic search via local LLM (~2-3s)",
+        description="Translate natural language into relevant tags using Ollama gemma3:12b, "
+                    "then search the tag index. Best for 'that thing about X' style queries. "
+                    "Requires Ollama running locally.",
+        parents=[global_parser],
+    )
+    query_parser.add_argument("text", help="Natural language query (e.g. 'that warranty claim we filed last spring')")
+    query_parser.add_argument("--top", type=int, default=DEFAULT_TOP_N, help="Max tag suggestions (default: %(default)s)")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    paths = resolve_paths(args.workspace)
+    dirs = [paths["memory_dir"], paths["reports_dir"]]
+    timings: dict[str, int] = {}
+
+    # Build or load index. Files are keyed by workspace-root-relative path
+    # (e.g. "memory/people/robin/profile.md") so distinct files with the same
+    # basename don't silently collide.
+    t0 = time.monotonic()
+    if args.no_cache:
+        index = build_index(dirs, root=paths["root"])
+    else:
+        index = load_or_build(paths["cache_path"], dirs, CACHE_TTL_SECONDS, root=paths["root"])
+    timings["index_ms"] = int((time.monotonic() - t0) * 1000)
+
+    result: dict = {}
+
+    if args.command == "keyword":
+        t0 = time.monotonic()
+        search_result = keyword_search(args.term, index, dirs, root=paths["root"])
+        timings["search_ms"] = int((time.monotonic() - t0) * 1000)
+        result = {
+            "mode": "keyword",
+            "query": args.term,
+            "tag_matches": search_result["tag_matches"],
+            "content_matches": search_result["content_matches"],
+        }
+
+    elif args.command == "tags":
+        t0 = time.monotonic()
+        if args.count:
+            tag_counts = [(tag, len(files)) for tag, files in index.tag_to_files.items()]
+            tag_counts.sort(key=lambda x: (-x[1], x[0]))
+            result = {
+                "mode": "tags",
+                "query": "",
+                "tags": [{"tag": t, "count": c} for t, c in tag_counts],
+            }
+        else:
+            result = {
+                "mode": "tags",
+                "query": "",
+                "tags": index.all_tags,
+            }
+        timings["search_ms"] = int((time.monotonic() - t0) * 1000)
+
+    elif args.command == "query":
+        t0 = time.monotonic()
+        search_results_by_tag: dict = {"tag_matches": [], "content_matches": []}
+
+        try:
+            suggested = suggest_tags(args.text, index.all_tags, OLLAMA_MODEL, args.top, OLLAMA_URL)
+            timings["llm_ms"] = int((time.monotonic() - t0) * 1000)
+
+            # Search for each suggested tag
+            t1 = time.monotonic()
+            all_tag_matches = []
+            seen_files: set[str] = set()
+            for tag in suggested:
+                files = index.tag_to_files.get(tag, [])
+                for f in files:
+                    if f not in seen_files:
+                        seen_files.add(f)
+                        file_tags = [t for t in index.file_to_tags.get(f, [])
+                                     if t.lower() in [s.lower() for s in suggested]]
+                        all_tag_matches.append({"file": f, "matched_tags": file_tags})
+            search_results_by_tag["tag_matches"] = all_tag_matches
+            timings["search_ms"] = int((time.monotonic() - t1) * 1000)
+        except ConnectionError as e:
+            suggested = []
+            timings["llm_ms"] = int((time.monotonic() - t0) * 1000)
+            result["error"] = str(e)
+
+        result = {
+            "mode": "query",
+            "query": args.text,
+            "suggested_tags": suggested,
+            "tag_matches": search_results_by_tag["tag_matches"],
+            "content_matches": search_results_by_tag["content_matches"],
+        }
+
+    timings["total_ms"] = sum(timings.values())
+    if args.timing:
+        result["timing"] = timings
+
+    if args.pretty:
+        _print_pretty(result)
+    else:
+        print(json.dumps(result, indent=2))
+
+
+def _print_pretty(result: dict):
+    """Print results in human-readable format."""
+    mode = result.get("mode", "")
+    query = result.get("query", "")
+
+    if query:
+        print(f"\n  Search: {query}")
+    print(f"  Mode: {mode}\n")
+
+    if mode == "tags":
+        tags = result.get("tags", [])
+        if tags and isinstance(tags[0], dict):
+            print(f"  {'Tag':<40} Count")
+            print(f"  {'─' * 40} {'─' * 5}")
+            for entry in tags:
+                print(f"  {entry['tag']:<40} {entry['count']}")
+        else:
+            for tag in tags:
+                print(f"  • {tag}")
+        print(f"\n  Total: {len(tags)} tags")
+    else:
+        tag_matches = result.get("tag_matches", [])
+        if tag_matches:
+            print(f"  Tag Matches ({len(tag_matches)}):")
+            for m in tag_matches:
+                print(f"    {m['file']}: {', '.join(m['matched_tags'])}")
+
+        content_matches = result.get("content_matches", [])
+        if content_matches:
+            print(f"\n  Content Matches ({len(content_matches)}):")
+            for m in content_matches:
+                print(f"    {m['file']}:")
+                for line in m["matched_lines"][:5]:
+                    print(f"      L{line['line']}: {line['text'][:100]}")
+
+        suggested = result.get("suggested_tags", [])
+        if suggested:
+            print(f"\n  Suggested Tags: {', '.join(suggested)}")
+
+    if "timing" in result:
+        print(f"\n  Timing: {result['timing']}")
+
+    if "error" in result:
+        print(f"\n  Error: {result['error']}")
+
+    print()
+
+
+if __name__ == "__main__":
+    main()

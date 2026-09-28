@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LAUNCHD_PREFIX}}.weekly-deep-consolidation</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>{{MINERU_HOME}}/scripts/trigger-weekly-deep-consolidation-claude-code.sh</string>
+    </array>
+
+    <!-- Monday 2:27 AM (launchd: 1=Mon) — after the 1 AM daily consolidation so Sunday's sessions are visible -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>27</integer>
+    </dict>
+
+    <key>TimeOut</key>
+    <integer>7200</integer>
+
+    <key>StandardOutPath</key>
+    <string>{{MINERU_HOME}}/logs/weekly-deep-consolidation.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{MINERU_HOME}}/logs/weekly-deep-consolidation.err</string>
+
+    <key>WorkingDirectory</key>
+    <string>{{MINERU_HOME}}</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>MINERU_HOME</key>
+        <string>{{MINERU_HOME}}</string>
+        <key>MINERU_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>MINERU_INJECT_QUEUE_DIR</key>
+        <string>{{MINERU_INJECT_QUEUE_DIR}}</string>
+    </dict>
+</dict>
+</plist>

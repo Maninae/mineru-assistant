@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LAUNCHD_PREFIX}}.house-scan</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>{{MINERU_HOME}}/scripts/house_scan.py</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>7</integer>
+    </dict>
+
+    <key>TimeOut</key>
+    <integer>900</integer>
+
+    <key>WorkingDirectory</key>
+    <string>{{MINERU_HOME}}</string>
+
+    <key>StandardOutPath</key>
+    <string>{{MINERU_HOME}}/logs/house-scan/launchd-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{MINERU_HOME}}/logs/house-scan/launchd-stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{USER_HOME}}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>{{USER_HOME}}</string>
+        <key>MINERU_HOME</key>
+        <string>{{MINERU_HOME}}</string>
+        <key>MINERU_BRIEFS_ROOT</key>
+        <string>{{BRIEFS_ROOT}}</string>
+        <key>MINERU_HOUSE_SCAN_CONFIG</key>
+        <string>{{MINERU_HOME}}/config/house_scan_config.json</string>
+        <key>MINERU_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>MINERU_INJECT_QUEUE_DIR</key>
+        <string>{{MINERU_INJECT_QUEUE_DIR}}</string>
+    </dict>
+</dict>
+</plist>

@@ -1,0 +1,178 @@
+# Prompts & Skills Alignment Check
+
+You are {{PERSONA_NAME}} running a scheduled job: **Prompts Alignment Check** (Tue/Fri at 10 PM PT).
+
+## Goal
+
+Audit the system prompt files and skills for issues (bad, misaligned, contradictory, confusing, outdated, or just not working well), then run the **two-lane** resolution {{USER_NAME}} set (July 2026):
+- **Clear fixes: apply them directly this run** (Step 4a). This includes any issue with a single clearly-correct fix, even one you framed as options, as long as there is no genuine tradeoff. No waiting for {{USER_NAME}}.
+- **Genuine decisions (real tradeoffs, or structural/executable changes): report the top 5** for {{USER_NAME}} to decide (Step 5). Do NOT auto-apply these.
+
+You may fan out subagents in Steps 1-3 to parallelize the file/skill scans. Step 4 synthesizes their findings — wait for all subagents to return before deciding what to fix vs. report so late findings aren't dropped.
+
+---
+
+## Step 0: Scorecard the Previous Report
+
+Read the most recent `briefs_prompts_alignment/routine-*.md`. For each issue it raised, **grep the current files** to determine fixed vs still-open — never trust a past report's (or session's) claim that something was fixed; verify against the file on disk. Lead the new report's Notes with a one-line scorecard (e.g. "Jun 30: 7 fixed, 3 unfixed — #2, #5, #9 carried forward"). Carry unfixed high-impact issues forward into the top 5 with a "repeat xN" marker.
+
+---
+
+## Known Exceptions (do NOT re-flag)
+
+Permanent carve-outs where the "obvious" issue is actually intentional. Verify against the current file, but do NOT surface these as findings — {{USER_NAME}} has already decided. Record each carve-out as a bullet naming the file, the "obvious" issue, and why it is intentional, so a later alignment pass does not re-raise it.
+
+- **Example:** `prompts/DOCTOR.md` lives in `prompts/` WITHOUT being `@`-imported into `CLAUDE.md`. If that is intentional for this install (e.g. only an isolated `/doctor` session loads it), note it here so the pass does not add an `@import` or flag it.
+
+- **Failed cron runs are not re-fired.** Engine policy: the next scheduled cycle picks up on its own, so a failure costs one cycle of coverage (see `prompts/TECHNICAL.md`, "When Jobs Go Silent"). Do NOT propose a catch-up / re-run script.
+
+Add install-specific carve-outs below as {{USER_NAME}} decides them.
+
+---
+
+## Step 1: Read All System Prompt Files
+
+Read **every** all-caps markdown file in the workspace root and `prompts/` directory.
+
+**Root:** `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `TOOLS.md`, `MEMORY.md`, `CLAUDE.md`, `SECURITY.md`
+
+**prompts/:** `prompts/GMAIL.md`, `prompts/GCALENDAR.md`, `prompts/TECHNICAL.md`, `prompts/TODO.md` (list the directory to catch any newly added files)
+
+Read all files completely. Do not skim.
+
+---
+
+## Step 2: Scan All {{PERSONA_NAME}} Skills
+
+Scan every `mineru__*` skill under `{{USER_CLAUDE_HOME}}/skills/`, plus any unprefixed personal skills this install has added there. Read each skill's full content — SKILL.md, scripts, configs, templates, READMEs — to understand it end-to-end.
+
+```bash
+ls -d {{USER_CLAUDE_HOME}}/skills/mineru__*/
+ls -d {{USER_CLAUDE_HOME}}/skills/*/    # also catch any unprefixed personal skills
+```
+
+Also scan the **always-loaded workspace stack** (the files you just read in Step 1) — they're effectively skills too, the most expensive ones since they load every session.
+
+Also scan `recurring/` instruction files — they're "skills" for cron jobs.
+
+For each, check:
+- **Outdated paths/commands** — Do referenced scripts/binaries/files still exist? (`ls` to verify.)
+- **Stale instructions** — Match current tooling and workflows?
+- **Dead references** — Tools, APIs, configs that no longer exist.
+- **Inconsistencies with system prompts** — Does TOOLS.md or AGENTS.md contradict a skill?
+- **Missing skills** — Recurring tasks or pipelines that should have a skill but don't.
+- **Improvements** — Better approaches, missing edge cases, things learned in daily logs that should be captured.
+
+---
+
+## Step 3: Analyze for Issues
+
+Look for:
+
+- **Contradictions** — File A says X, File B says Y
+- **Outdated info** — References to things that no longer exist, wrong paths, stale instructions
+- **Redundancy** — Same thing said in multiple places (maintenance burden, drift risk)
+- **Confusion** — Unclear purpose, overlapping scope between files, ambiguous instructions
+- **Misalignment** — Instructions that don't match actual behavior or tooling
+- **Missing context** — Things that should be documented but aren't
+- **Token waste** — Verbose sections in always-loaded files that could be tighter (high-leverage since they load every session)
+
+Cross-reference with:
+- Actual directory structure (`ls -la`, check paths exist)
+- Recent daily logs in `memory/daily/` (what problems came up this week?)
+- Cron jobs and hooks (do the docs match reality?)
+
+---
+
+## Step 4: Prioritize and Draft Fixes
+
+Wait for ALL subagents from Steps 1-3 to return before synthesizing. Late-arriving findings may be more impactful than early ones.
+
+Find everything: typos, contradictions, stale info, redundancy, all of it. **Apply every clear fix (Step 4a); report only the top 5 FORKS** (genuine decisions) in the delivered report ({{USER_NAME}}'s explicit cap, July 2026 — 10 was too many to process). Prioritize the forks by:
+
+1. **Actively harmful** — Wrong instructions that cause sessions to fail or do the wrong thing
+2. **Likely to confuse** — Contradictions between files, dead references
+3. **Easy wins** — Clear improvements that take one edit
+
+If you find more than 5, the rest can wait for next time. We'll chip away at it.
+
+For each issue:
+- **What's wrong** — Specific description with file names and line references
+- **Why it matters** — Impact on session quality or correctness
+- **Suggested fix** — Concrete change (show before/after if helpful)
+
+**CONCISENESS IS CRITICAL.** {{USER_NAME}} reads these on Telegram while busy. Executive brief, not a research paper:
+- Each issue: 3-5 lines max. State the contradiction/error, the files, and the fix. That's it.
+- No restating context {{USER_NAME}} already knows (e.g. don't explain what MEMORY.md is or how @-imports work)
+- No multi-paragraph problem descriptions — one sentence for the problem, one for the impact, one for the fix
+- No quoting large blocks of code/text — just reference the file and line number
+- The Notes section at the bottom: bullet list only, one line per item
+
+---
+
+## Step 4a: Apply the Super-Clear Fixes (this run)
+
+Sort every finding into two lanes. The gate question for CLEAR: **would a reasonable person pick anything other than your recommendation?** If no, it is CLEAR, apply it, even if you framed it as options in your head. Do not defensively route an obvious fix to a fork just because you can imagine alternatives (over-forking clear fixes is the failure mode {{USER_NAME}} flagged, July 2026).
+- **CLEAR** — apply directly this run. Covers both (1) mechanically-obvious fixes (typos, wrong tool/skill/file names, dead references, broken paths, stale facts with an authoritative source, single-canonical-answer contradictions) AND (2) issues where analysis lands on a single clearly-correct fix with no genuine competing resolution, i.e. the "options" collapse to "the right fix vs. leaving it broken." A fix that is safe regardless of an open question is CLEAR (e.g. dropping a volatile count sidesteps needing the exact number).
+- **FORK** — report for {{USER_NAME}}, do NOT apply. Reserve for genuine decisions: two-or-more reasonable resolutions where {{USER_NAME}}'s preference actually matters (a real tradeoff, not fix-vs-broken); a change that hinges on a fact only {{USER_NAME}} knows or on an external verification you cannot sidestep; deleting load-bearing content; OR any change that moves/renames/deletes files or symlinks or edits an executable script/plist/config/code path (a wrong unattended edit there breaks a job) — these stay FORKs even when the recommended fix looks obvious. When verification of a would-be CLEAR fix is not clean, demote to FORK.
+
+Discipline for the CLEAR lane:
+- **Verify before you fix.** Re-read the actual file/line and confirm the issue is real and current. Reports go stale and repeat false positives (e.g. a past report claiming a tool in some skill doesn't exist when it does). If verification isn't clean, demote it to a FORK.
+- **Edit at the source, never the rendered copy.** CLAUDE/IDENTITY/SOUL/AGENTS/TOOLS/SECURITY, `prompts/*.md`, generic `recurring/*.md`, and `launchd/*.plist` are rendered from `{{MINERU_HOME}}/engine/**/*.template` plus `{{MINERU_HOME}}/active/overrides/` and the `*.local.md` files; a direct edit is erased by the next install. Personal fixes go to the `.local.md` file or the override; generic fixes go to the engine template (that is a commit to the engine repo, which is headed for public: no personal content). After editing, re-render with `{{MINERU_HOME}}/engine/../.venv/bin/mineru profile install --target {{MINERU_HOME}} --apply`.
+- Minimal, surgical edits in the file's own voice. Never touch secrets/credentials/PII. Preserve every safety guardrail (read-only paths stay read-only, the firewall stays intact). Never `rm` and never remove files or symlinks here (that's a FORK). Never use em-dashes.
+- Persist the fixes: `.mineru` edits ride the daily backup. If you edited any `{{USER_CLAUDE_HOME}}/skills/` file, commit and push it via `/sync-claude-toolkit` (claude-toolkit is {{USER_NAME}}'s personal repo, pre-authorized to push, keep it current). No AI attribution in commit messages.
+- Keep a changelog (file + one-line before→after) for the report.
+
+---
+
+## Step 5: Write Report
+
+Write to `briefs_prompts_alignment/routine-YYYY-MM-DD.md` (use today's date):
+
+```markdown
+# Prompts Alignment Check — YYYY-MM-DD
+
+## Summary
+
+Brief 1-2 sentence overview, including a count (N auto-fixed, M forks).
+
+---
+
+## Auto-Fixed This Run
+
+One bullet per clear fix applied: `file` — one-line before→after. Write "None this run." if nothing was clear enough to auto-apply. At the end, note which edits (if any) were pushed to claude-toolkit.
+
+---
+
+## Forks for {{USER_NAME}} (top 5)
+
+The ambiguous issues that need {{USER_NAME}}'s decision. For each:
+
+### 1. [Issue Title]
+
+**Files:** `FILE.md`
+
+**Fork:** [The decision, framed as the options/paths {{USER_NAME}} picks between]
+
+**Recommendation:** [Your lean, if any]
+
+---
+
+### 2. [Issue Title]
+
+...
+
+---
+
+## Notes
+
+Any additional observations or things to watch (bullet list, one line each).
+```
+
+## Step 6: Deliver
+
+```bash
+python3 {{MINERU_HOME}}/scripts/deliver-output.py {{MINERU_HOME}}/briefs_prompts_alignment/routine-YYYY-MM-DD.md
+```
+
+See `recurring/README.md` → Standard Delivery Contract. The report IS the delivery — no follow-up message, deliver exactly once.

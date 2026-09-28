@@ -1,0 +1,6 @@
+#!/bin/bash
+# Wrapper for amazon-orders CLI
+# Uses venv at $MINERU_HOME/.venv-amazon
+
+source "${MINERU_HOME:-$HOME/.mineru}/.venv-amazon/bin/activate"
+exec amazon-orders "$@"

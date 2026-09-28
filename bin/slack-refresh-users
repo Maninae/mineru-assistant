@@ -1,0 +1,13 @@
+#!/bin/bash
+# Refresh the Slack user cache
+# Run periodically or when new members join
+
+TOKEN=$(security find-generic-password -a "${SLACK_KEYCHAIN_ACCOUNT:-mineru}" -s "${SLACK_KEYCHAIN_SERVICE:-slack-bot-token}" -w 2>/dev/null) || { echo "Error: Slack token not in Keychain" >&2; exit 1; }
+CACHE="${MINERU_HOME:-$HOME/.mineru}/cache/slack-users.json"
+
+echo "Fetching Slack users..."
+curl -s -H "Authorization: Bearer $TOKEN" "https://slack.com/api/users.list?limit=1000" | \
+  jq '[.members[] | {id, name, real_name, display_name: .profile.display_name}] | map({key: .id, value: {name: .name, real_name: .real_name, display: .display_name}}) | from_entries' > "$CACHE"
+
+COUNT=$(jq 'keys | length' "$CACHE")
+echo "Cached $COUNT users to $CACHE"

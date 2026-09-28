@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""
+gog-firewall: Secure wrapper for gog (Google Workspace CLI).
+
+Pipeline:
+1. Run gog command
+2. WRITE commands: pass output through untouched (no external data to screen)
+3. READ commands: clean output (strip metadata) -> screen per-item for prompt
+   injection (patterns + local Ollama, see scripts/firewall/CLAUDE.md).
+   Flagged items (emails, events) are redacted to stubs; the rest flows
+   through. Exit 77 only when nothing was safe.
+
+Exit codes:
+    0:  Output delivered (possibly with individual items redacted)
+    77: Everything blocked (prompt injection detected)
+    78: Firewall error (screening failed, blocked for safety)
+    *:  Passthrough from underlying gog command
+
+Usage: gog-firewall [--raw] [gog arguments...]
+       --raw    Skip output cleaning (return full JSON), still screens
+
+Example: gog-firewall gmail search "from:boss"
+         gog-firewall --raw gmail get <id>
+"""
+import subprocess
+import sys
+from pathlib import Path
+from typing import List, Optional
+
+# Inject a sane default --max for list-style read commands so callers don't
+# get silently truncated to gog's built-in 10. Explicit --max/--limit wins.
+_MAX_DEFAULT = 500
+_DEFAULT_MAX_SUBCOMMANDS = {("gmail", "search"), ("calendar", "events")}
+
+
+def _find_subcommand_start(gog_args):
+    """Return the index of the first non-global-flag token in gog_args.
+
+    gog has a handful of global flags (`--account=<email>`, `--account
+    <email>`, `--profile <name>`, `--profile=<name>`) that legitimately
+    precede the noun/verb pair. Skip them so downstream (noun, verb)
+    matching still fires when the CLI wrapper injected an
+    `--account=<email>` up front for per-profile isolation.
+    """
+    _GLOBAL_FLAGS_WITH_VALUE = ("--account", "--profile")
+    i = 0
+    n = len(gog_args)
+    while i < n:
+        tok = gog_args[i]
+        # `--account=you@x.com` -> single token, skip one.
+        if any(tok.startswith(flag + "=") for flag in _GLOBAL_FLAGS_WITH_VALUE):
+            i += 1
+            continue
+        # `--account you@x.com` -> two tokens, skip both.
+        if tok in _GLOBAL_FLAGS_WITH_VALUE:
+            i += 2
+            continue
+        return i
+    return n
+
+
+def _strip_gog_global_flags(gog_args):
+    """Return gog_args with any leading global-flag prefix removed.
+
+    Load-bearing for the read-side pipeline (is_read_command, clean,
+    _get_gog_surface): those consumers key off (noun, verb) at index
+    0/1, and the CLI wrapper may have prepended `--account=<email>`
+    for per-profile isolation. Without this strip, `--account=...`
+    would land at index 0 and every write would be misclassified as a
+    read (and every per-service cleaner would silently no-op, passing
+    raw un-stripped gog JSON downstream). The primary injection
+    screener still runs unconditionally, so this only defends the
+    noise-stripping + read/write classification layer.
+    """
+    start = _find_subcommand_start(gog_args)
+    return gog_args[start:]
+
+
+def _inject_default_max(gog_args):
+    """Append --max <_MAX_DEFAULT> for list subcommands when caller omitted a limit."""
+    start = _find_subcommand_start(gog_args)
+    if len(gog_args) - start < 2:
+        return gog_args
+    key = (gog_args[start].lower(), gog_args[start + 1].lower())
+    if key not in _DEFAULT_MAX_SUBCOMMANDS:
+        return gog_args
+    has_limit = any(
+        a in ("--max", "--limit")
+        or a.startswith("--max=")
+        or a.startswith("--limit=")
+        for a in gog_args
+    )
+    if has_limit:
+        return gog_args
+    return gog_args + ["--max", str(_MAX_DEFAULT)]
+
+
+FIREWALL_DIR = Path(__file__).resolve().parent.parent / "scripts" / "firewall"
+sys.path.insert(0, str(FIREWALL_DIR))
+
+from gog_cleaner import clean, is_read_command
+from wrapper_common import EXIT_ERROR, screen_and_emit
+
+# Boundary validator (optional, warn-only)
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
+sys.path.insert(0, str(SCRIPTS_DIR))
+try:
+    import boundary_validator as bv
+    HAS_VALIDATOR = True
+except ImportError:
+    HAS_VALIDATOR = False
+
+
+def _get_gog_surface(gog_args: List[str], cleaned: bool = False) -> Optional[str]:
+    """Map gog command args to a boundary_validator surface name."""
+    if len(gog_args) < 2:
+        return None
+    prefix = "gog_cleaned" if cleaned else "gog"
+    service = gog_args[0].lower()
+    action = gog_args[1].lower()
+    surface_map = {
+        ("gmail", "search"): "{}.gmail_search".format(prefix),
+        ("gmail", "get"): "{}.gmail_get".format(prefix) if not cleaned else None,
+        ("calendar", "events"): "{}.calendar_events".format(prefix),
+    }
+    return surface_map.get((service, action))
+
+
+def _validate_gog_output(output: str, surface: str) -> None:
+    """Run boundary validation on gog output. Non-blocking, warnings only."""
+    if not HAS_VALIDATOR or surface not in bv.SURFACE_VALIDATORS:
+        return
+    try:
+        import json as _json
+        validator = bv.SURFACE_VALIDATORS[surface]
+        for line in output.strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = _json.loads(line)
+                if isinstance(obj, dict):
+                    validator(obj)
+                elif isinstance(obj, list):
+                    for item in obj:
+                        if isinstance(item, dict):
+                            validator(item)
+            except _json.JSONDecodeError:
+                pass
+        bv.flush_warnings(surface)
+    except Exception:
+        pass  # never break the pipeline
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: gog-firewall [--raw] [gog arguments...]", file=sys.stderr)
+        print("       --raw    Skip output cleaning, still screens for injection", file=sys.stderr)
+        print("Example: gog-firewall gmail search 'from:boss'", file=sys.stderr)
+        sys.exit(1)
+
+    raw_mode = False
+    args = sys.argv[1:]
+    if args and args[0] == "--raw":
+        raw_mode = True
+        args = args[1:]
+    if not args:
+        print("Usage: gog-firewall [--raw] [gog arguments...]", file=sys.stderr)
+        sys.exit(1)
+
+    gog_args = args
+    gog_args = _inject_default_max(gog_args)
+    # The subcommand-only slice (any injected `--account=<email>` / `--profile`
+    # global-flag prefix removed). Load-bearing for is_read_command / clean /
+    # _get_gog_surface, which key off (noun, verb) at index 0/1 — see the
+    # docstring on `_strip_gog_global_flags` for the failure mode this prevents.
+    subcmd_args = _strip_gog_global_flags(gog_args)
+
+    try:
+        result = subprocess.run(
+            ["gog"] + gog_args,
+            capture_output=True,
+            text=True,
+            timeout=120,  # 2 minute timeout for API calls
+        )
+    except subprocess.TimeoutExpired:
+        print("ERROR: gog command timed out", file=sys.stderr)
+        sys.exit(EXIT_ERROR)
+    except FileNotFoundError:
+        print("ERROR: gog not found. Ensure it's installed and in PATH.", file=sys.stderr)
+        sys.exit(EXIT_ERROR)
+
+    output = result.stdout
+    stderr_output = result.stderr or ""
+
+    if not output.strip():
+        if stderr_output:
+            print(stderr_output, end="", file=sys.stderr)
+        sys.exit(result.returncode)
+
+    # Write commands produce no external data: pass through unscreened
+    if not is_read_command(subcmd_args):
+        print(output, end="")
+        if stderr_output:
+            print(stderr_output, end="", file=sys.stderr)
+        sys.exit(result.returncode)
+
+    # READ command: clean (unless --raw), validate, screen
+    try:
+        processed_output = output if raw_mode else clean(subcmd_args, output)
+        if HAS_VALIDATOR:
+            surface = _get_gog_surface(subcmd_args, cleaned=not raw_mode)
+            if surface:
+                _validate_gog_output(processed_output, surface)
+    except Exception as e:  # fail-closed: cleaning broke, don't emit raw data
+        print("ERROR: firewall preprocessing failed ({}). Blocked for safety.".format(e),
+              file=sys.stderr)
+        sys.exit(EXIT_ERROR)
+
+    screen_and_emit(
+        processed_output, stderr_output, result.returncode,
+        cmd_display="gog " + " ".join(gog_args),
+        source_hint="The external data source",
+    )
+
+
+if __name__ == "__main__":
+    main()

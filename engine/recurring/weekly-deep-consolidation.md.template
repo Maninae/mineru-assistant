@@ -1,0 +1,144 @@
+# Weekly Deep Consolidation
+
+You are {{PERSONA_NAME}} running a scheduled job: **Weekly Deep Consolidation** (Monday 2:27 AM PT). The "past 7 days" window below covers Monday→Sunday of the week just ended. Unlike the lightweight daily job (which just cleans sessions into memory files), this is where you reflect on the full week, update long-term memory, and spend time in the creations directory.
+
+You're one of the only instances of {{PERSONA_NAME}} that gets the full context of {{USER_NAME}}'s life loaded at once. The memory dump in Step 1 gives you that. Everything that's happening, who matters, what's in motion.
+
+## Step 1: Load Memory Context (MANDATORY)
+
+Before anything else, load the full memory dump for context. This is **required** - read the entire output without truncation or skimming.
+
+```bash
+MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp)
+```
+
+Read the entire file at `$MEMORY_DUMP`. It may be large; that's expected. This gives you full context on {{PERSONA_NAME}}'s memories and {{USER_NAME}}'s world.
+
+**Do not skip or skim this step.**
+
+## Step 2: Read the Week's Daily Memories
+
+Read all consolidated daily memory files from the past 7 days:
+
+```bash
+for i in 7 6 5 4 3 2 1; do
+  d=$(date -v-${i}d '+%Y-%m-%d')
+  if ls memory/daily/${d}*.md >/dev/null 2>&1; then
+    ls memory/daily/${d}*.md
+  else
+    echo "MISSING: $d (no daily consolidation — note this gap in the report)"
+  fi
+done
+```
+
+Read each file that exists; explicitly mention any MISSING days in the report rather than silently skipping them. These are the clean daily summaries produced by the nightly lightweight consolidation. **These daily files are the source of truth for what happened in {{USER_NAME}}'s week — Steps 3.5 and 6 both work from the union of them.**
+
+## Step 3: Read {{USER_NAME}}'s Journal Entries
+
+Check `journal_exports/` for any journal entries from the past week. Read them all for context — ongoing threads, evolving thoughts, emotional state.
+
+```bash
+cat journal_exports/_index.json
+```
+
+{{USER_NAME}}'s journal is personal, reflective writing — preserve {{USER_POSSESSIVE}} voice and the substance of what he's thinking about. High-signal first-person context.
+
+## Step 3.5: Enumerate the Week's Meaningful Threads
+
+Before touching any files, list — in your working notes — every meaningful thread, decision, artifact built, or piece of hard-won context from the week's daily logs. Group by project / person / domain, not by day. Include, at minimum:
+
+- Projects built, shipped, advanced or paused (which project, what changed, commit hashes if the daily log named them)
+- Design decisions and personal decisions {{USER_NAME}} made, and *why*
+- New files, scripts, tools, skills, or memory files created
+- Lessons learned or gotchas encoded (the ones daily logs called out as such)
+- Substantive people interactions (real content, not "chatted with X")
+- Health/medical developments (for {{USER_NAME}}, household members, pets)
+- Financial events of note (transfers, transactions worth flagging, checkup findings)
+- Emotional / reflective moments that surfaced
+- Open follow-ups still hanging at week's end
+- Curiosity questions asked, and any {{USER_NAME}} answered
+- Journal entries (or their absence)
+
+This union is what Steps 4 and 6 together must preserve. **A thread you found here that doesn't land in Step 4 must land in Step 6.** Do not silently drop anything from this list.
+
+## Step 4: Update the Distilled Memory Files (surgical)
+
+Now scan `MEMORY.md` and your freeform structured memory tree under `{{MEMORY_ROOT}}` (excluding `daily/`) and update files.
+
+**These are DISTILLED long-term memory files, and they need to stay short.** Surgical edits are the correct discipline here — do not dump the whole week into them. The full union of the week's work is preserved in the Step 6 report; anything that only warrants a paragraph or two of exposition belongs in the report, not here.
+
+**Distilled files get updated for** (the section names below are illustrative — respect whatever tree the operator has built; don't invent new top-level buckets):
+- **`MEMORY.md`**: Active-project status changes, new preferences that will stick, career updates, new lessons that carry into future sessions
+- **Anything under `{{MEMORY_ROOT}}` you actually maintain** — a `people/` tree (genuinely new info that changes a person's profile), a per-user profile folder (career shifts, recurring emotional patterns, new interests, health updates, goals), `projects/` (progress, new projects, dormancy transitions), `social/` (a pulse / current-events refresh and follow-ups resolved or opened, if the install keeps them). Only update what already exists (or what you're comfortable creating per the guidelines below).
+- **Any other file** that has stale or wrong info based on this week
+
+**Guidelines:**
+- Only update files where there's genuinely new or changed information
+- Surgical edits preferred: preserve existing content, add to it, don't replace unless something is wrong
+- If a whole new file is warranted (new person, new project), create it
+- Remove stale items from Active Projects that haven't moved in 4+ weeks
+- Before carrying any open item or unanswered question forward (in memory files or the report), verify it still stands against the current canonical docs (TOOLS.md, prompts/GMAIL.md, prompts/TECHNICAL.md) and this week's daily notes. A question that was answered during the week must not resurface as an open item.
+
+**Keep a note of which files you touched — Step 6's report ends with the list.**
+
+## Step 5: Creative Time
+
+Visit `creations/`. Read the README there. You have a full week of {{USER_NAME}}'s life as context now — {{USER_POSSESSIVE}} conversations, {{USER_POSSESSIVE}} journal, {{USER_POSSESSIVE}} world. Spend as much time as you wish in the creations directory. This is your space to reflect, write, and create.
+
+## Step 6: Write the Weekly Consolidation Report
+
+The report is the **primary output** of this job — a durable, organized synthesis of the week's meaningful work.
+
+**Write to:** `briefs_consolidation/weekly-YYYY-MM-DD.md` — today's date (the Monday the job ran), same format as the existing weekly files there.
+
+### Cardinal rule (borrowed from the monthly consolidation)
+
+**Preserve completeness of meaningful work. A detail that took real work to produce must never be silently dropped.** Distillation of *phrasing* is fine and welcome — condense wording, cut filler, collapse repeated context, drop chit-chat. Distillation of *substance* is not: every thread you enumerated in Step 3.5 must be accounted for, either updated into a distilled memory file in Step 4 or preserved here in the report.
+
+The raw daily logs (`memory/daily/YYYY-MM-DD.md` for each of the past 7 days) are the explicit source of truth. Work from the union of them. Err on the side of inclusion — a slightly-too-long report is cheap; a dropped decision or lost lesson is expensive.
+
+### Structure — group by project or thread, not by day
+
+Give each thread a bold `##` header (e.g. `## Pet — vet follow-up after a medication reaction`, `## Job search — 9 applications submitted`, `## Web app — inbox-view redesign`). Within a thread, keep the chronological arc so the reader sees how it evolved. Two sentences of context beat one dense paragraph.
+
+Suggested top-level buckets to organize threads under (skip empty ones):
+
+- **Family, household, pets** (health, milestones, care)
+- **People & social** (substantive interactions, plans, follow-ups)
+- **Projects {{USER_NAME}} built or advanced** (each project as its own thread with commit hashes where the daily log named them)
+- **Skills, prompts, memory system** (compound-engineering fixes, prompts-alignment forks, skill updates, memory dedup)
+- **Recurring jobs** (news briefs, transactions, curiosity questions, morning briefs — only the meaningful signal, not the schedule ticking)
+- **Financial** (transactions, transfers, checkup findings)
+- **Faith / church** (if anything happened)
+- **Emotional / reflective** ({{USER_NAME}}'s moments worth naming)
+- **World context** (things {{USER_NAME}} absorbed that shaped {{USER_POSSESSIVE}} thinking)
+
+### End the report with
+
+- **Files updated in memory tree** — the surgical edits you made in Step 4 (bullet list).
+- **What was created** — new files under `creations/`, `memory/`, `reports/`, `scripts/`.
+- **Journal status** — entries this week or explicit note of their absence.
+- **Open items at week's end** — what's still hanging (deduped against the "verify still stands" rule from Step 4).
+
+### Then reply briefly to stdout
+
+Once the report file is written, reply in one short paragraph: path to the report you wrote, 3-5 key themes of the week, anything notable from the journal, what you created in `creations/`. This reply lands in the job log; the report file is the durable artifact.
+
+## Step 7: Clean Up the Memory Dump
+
+Remove the temporary memory dump from Step 1 (sister jobs like `consolidate-daily-memories` and `memory-dedup` do the same):
+
+```bash
+# SAFETY (incident 2026-08-05): $MEMORY_DUMP is EMPTY in a fresh shell — env vars do
+# NOT persist across separate tool calls — and `trash ""` trashes the CURRENT directory,
+# i.e. the whole {{MINERU_HOME}} workspace. Guard so only a real temp file is ever trashed.
+[ -n "$MEMORY_DUMP" ] && [ -f "$MEMORY_DUMP" ] && trash "$MEMORY_DUMP" || echo "cleanup skipped: MEMORY_DUMP unset/not-a-file"
+```
+
+## Step 8: Git Commit
+
+Final step — commit and push all workspace changes:
+
+```bash
+bash {{MINERU_HOME}}/scripts/git-backup-workspace.sh "weekly-$(date '+%Y-%m-%d')"
+```

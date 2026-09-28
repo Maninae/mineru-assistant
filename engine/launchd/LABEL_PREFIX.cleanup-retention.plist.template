@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LAUNCHD_PREFIX}}.cleanup-retention</string>
+
+    <!-- Monthly workspace retention: gzip logs >14d, trash gzipped logs >90d,
+         archive briefs >120d, trash telegram image cache >14d. All deletion
+         via `trash` (recoverable). Runs the 2nd of each month at 4:07 AM. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>{{MINERU_HOME}}/scripts/cleanup-retention.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Day</key>
+        <integer>2</integer>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>7</integer>
+    </dict>
+
+    <key>TimeOut</key>
+    <integer>1800</integer>
+
+    <key>WorkingDirectory</key>
+    <string>{{MINERU_HOME}}</string>
+
+    <key>StandardOutPath</key>
+    <string>{{MINERU_HOME}}/logs/cleanup-retention/launchd-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{MINERU_HOME}}/logs/cleanup-retention/launchd-stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{{USER_HOME}}/.local/bin</string>
+        <key>HOME</key>
+        <string>{{USER_HOME}}</string>
+        <key>MINERU_HOME</key>
+        <string>{{MINERU_HOME}}</string>
+        <key>MINERU_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>MINERU_INJECT_QUEUE_DIR</key>
+        <string>{{MINERU_INJECT_QUEUE_DIR}}</string>
+    </dict>
+</dict>
+</plist>

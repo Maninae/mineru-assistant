@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""
+imsg-firewall: Secure wrapper for imsg-named (iMessage CLI).
+
+Output is screened per-message for prompt injection (patterns + local Ollama,
+see scripts/firewall/CLAUDE.md). Flagged messages are redacted to stubs; the
+rest of the conversation flows through. Exit 77 only when nothing was safe.
+
+Exit codes:
+    0:  Output delivered (possibly with individual messages redacted)
+    77: Everything blocked (prompt injection detected)
+    78: Firewall error (screening failed, blocked for safety)
+    *:  Passthrough from underlying imsg command
+
+Usage: imsg-firewall [imsg-named arguments...]
+Example: imsg-firewall chats --limit 10 --json
+Example: imsg-firewall history --chat-id 299 --limit 20 --json
+"""
+import datetime
+import subprocess
+import os
+import sys
+from pathlib import Path
+
+FIREWALL_DIR = Path(__file__).resolve().parent.parent / "scripts" / "firewall"
+sys.path.insert(0, str(FIREWALL_DIR))
+
+from imsg_cleaner import clean_imsg_output
+from wrapper_common import EXIT_ERROR, screen_and_emit
+
+# Path to the contact-resolving wrapper
+IMSG_NAMED = Path(__file__).resolve().parent / "imsg-named"
+
+LOG_DIR = Path(os.environ.get("MINERU_HOME", str(Path.home() / ".mineru"))).expanduser() / "logs" / "imsg-firewall"
+
+# Subcommands where `--max` is accepted as a synonym for `--limit` (parity with
+# `gog` CLI). The underlying `imsg` binary is a compiled Mach-O and only knows
+# `--limit`, so we translate at the wrapper layer. Last-wins ordering is
+# preserved: if both flags appear, the rightmost value reaches `imsg`.
+_MAX_ALIAS_SUBCOMMANDS = {"chats", "history"}
+
+
+def _translate_max_to_limit(args):
+    """Rewrite `--max`/`--max=N` to `--limit`/`--limit=N` for whitelisted subcommands.
+
+    Only affects the result-count flag — every other arg passes through untouched,
+    so unknown flags still error from `imsg` and the screening pipeline is unchanged.
+    """
+    if not args or args[0] not in _MAX_ALIAS_SUBCOMMANDS:
+        return args
+    translated = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--max":
+            translated.append("--limit")
+        elif a.startswith("--max="):
+            # `imsg` only accepts `--limit <value>` (space-separated), not
+            # `--limit=<value>`, so split the equals form into two args.
+            translated.append("--limit")
+            translated.append(a[len("--max="):])
+        else:
+            translated.append(a)
+        i += 1
+    return translated
+
+
+def _log_stderr(stderr_text: str) -> None:
+    """Append underlying-command stderr to a log for later inspection."""
+    if not stderr_text:
+        return
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_DIR / "stderr.log", "a", encoding="utf-8") as f:
+            f.write("\n--- {} ---\n{}".format(ts, stderr_text))
+    except OSError:
+        pass  # logging must never break the pipeline
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: imsg-firewall [imsg-named arguments...]", file=sys.stderr)
+        print("Example: imsg-firewall chats --limit 10 --json", file=sys.stderr)
+        print("Example: imsg-firewall history --chat-id 299 --limit 20 --json", file=sys.stderr)
+        sys.exit(1)
+
+    imsg_args = _translate_max_to_limit(sys.argv[1:])
+
+    # Hard-fail if imsg-named is missing — silently falling back to $PATH is a
+    # substitution risk (any same-named binary earlier on PATH could intercept).
+    if not IMSG_NAMED.exists():
+        print(
+            "ERROR: imsg-named not found at {}. "
+            "Refusing to fall back to $PATH for security (substitution risk).".format(IMSG_NAMED),
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_ERROR)
+
+    try:
+        result = subprocess.run(
+            [str(IMSG_NAMED)] + imsg_args,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        print("ERROR: imsg command timed out", file=sys.stderr)
+        sys.exit(EXIT_ERROR)
+
+    # Screen stdout only; stderr is logged and passed through separately so it
+    # never corrupts JSON parsing for downstream consumers.
+    output = result.stdout
+    stderr_output = result.stderr or ""
+    if stderr_output:
+        _log_stderr(stderr_output)
+
+    if not output.strip():
+        if stderr_output:
+            print(stderr_output, end="", file=sys.stderr)
+        sys.exit(result.returncode)
+
+    # Strip noisy metadata before screening (fewer tokens, fewer distractions)
+    imsg_command = imsg_args[0] if imsg_args else ""
+    cleaned_output = clean_imsg_output(imsg_command, output)
+
+    screen_and_emit(
+        cleaned_output, stderr_output, result.returncode,
+        cmd_display="imsg-firewall " + " ".join(imsg_args),
+        source_hint="An iMessage/SMS conversation",
+    )
+
+
+if __name__ == "__main__":
+    main()

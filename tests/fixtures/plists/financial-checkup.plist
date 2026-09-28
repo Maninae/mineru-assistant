@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.mineru.financial-checkup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/example/.mineru/scripts/trigger-financial-checkup-claude-code.sh</string>
+    </array>
+
+    <!-- weekly on Sunday at 21:00 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>21</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>TimeOut</key>
+    <integer>3600</integer>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/example/.mineru</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/example/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/example</string>
+        <key>MINERU_HOME</key>
+        <string>/Users/example/.mineru</string>
+        <key>MINERU_KEYCHAIN_ACCOUNT</key>
+        <string>mineru</string>
+        <key>MINERU_INJECT_QUEUE_DIR</key>
+        <string>/Users/example/.mineru/cache/inject-queue</string>
+    </dict>
+</dict>
+</plist>

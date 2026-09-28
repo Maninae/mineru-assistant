@@ -1,0 +1,158 @@
+# Monthly Financial Checkup
+
+**When:** First Sunday of each month at 9 PM local time. (launchd fires every Sunday; the trigger script no-ops on all but the first Sunday of the month — see `scripts/trigger-financial-checkup-claude-code.sh`.)
+
+## Goal
+
+Help {{USER_NAME}} maintain **financial awareness and control** over {{USER_POSSESSIVE}} spending and personal financial outlook. Understanding {{USER_POSSESSIVE}} life holistically is the foundation — connect the numbers to what's actually happening so the insights are meaningful and actionable.
+
+---
+
+## 1. Gather Context
+
+**Memory:** MEMORY.md is already loaded. Use `{{MINERU_HOME}}/bin/msearch keyword` for topic-specific context (recent events, people, decisions). Skim the last 3-5 `memory/daily/*.md` logs (yesterday and back — **today's Sunday log won't exist yet**; daily consolidation runs at 1 AM Monday) and prior `briefs_financial/monthly-*.md` reports if helpful.
+
+**Calendar** (your personal calendar) — via the **MCP Calendar tool** (compute ISO bounds from the current date):
+```
+mcp__claude_ai_Google_Calendar__list_events
+  calendarId: "{{PERSONAL_CALENDAR_ID}}"
+  startTime:  "<past horizon>T00:00:00"   # e.g. start of last week / last month
+  endTime:    "<upcoming horizon>T00:00:00"
+  timeZone:   "{{USER_TIMEZONE}}"
+  orderBy:    "startTime"
+```
+Query whatever horizons make sense — past week, past month, upcoming events. Events are returned under the `events` field as structured JSON (no jq piping).
+
+**Fallback (only on MCP auth error):** `{{MINERU_HOME}}/bin/gog-firewall calendar events {{PERSONAL_CALENDAR_ID}} --from <date> --to <date>` — then flag that {{USER_NAME}} should run `claude mcp login "claude.ai Google Calendar"`. (Full reference: `prompts/GCALENDAR.md`.)
+
+Build a comprehensive picture with deep understanding: What happened over the last 30 days? Where is {{USER_NAME}} this year?
+
+---
+
+## 2. Pull Financial Data
+
+Use `{{MINERU_HOME}}/bin/{{FINANCE_CLI_BINARY_NAME}}` ({{FINANCE_CLI_PRODUCT}}). Compute the window first — a **trailing 30-day period that ends 7 days ago**, so every charge in it has had ≥7 days to post (credit-card charges settle 2-4 days late; ending the window a week back guarantees nothing is still pending). All dates in **{{USER_TIMEZONE}}**.
+
+```bash
+PERIOD_START=$(TZ={{USER_TIMEZONE}} date -v-37d +%Y-%m-%d)   # 37 days ago
+PERIOD_END=$(TZ={{USER_TIMEZONE}} date -v-7d +%Y-%m-%d)      # 7 days ago (settle buffer)
+YEAR=$(TZ={{USER_TIMEZONE}} date +%Y)
+echo "Period: $PERIOD_START → $PERIOD_END (30 days, ending a week ago)"
+
+{{#each FINANCE_CLI_SUBCOMMANDS}}
+# {{comment}}
+{{MINERU_HOME}}/bin/{{cmd}}
+{{/each}}
+```
+
+Run the transaction and cashflow commands over the settled window with your finance CLI's date-range flags: `$PERIOD_START`..`$PERIOD_END` for the 30-day period, and `$YEAR-01-01`..`$PERIOD_END` for year-to-date (end YTD at the same settled boundary for consistency). Pull budget status too if the CLI has it.
+
+**If the finance CLI fails:** If auth errors, connection issues, or empty data — include what went wrong in the report so {{USER_NAME}} can debug. Don't silently skip; explain the issue.
+
+---
+
+## 3. Analyze: Connect Life ↔ Finances
+
+**This 30-day period:** What happened → how spending reflects it; patterns, category trends, budget status  
+**This Year (YTD):** Trajectory, savings rate, big-picture health
+
+Look for:
+- Correlations (social activity ↔ dining, stress ↔ spending)
+- New merchants, subscriptions, habits
+- Unusual or notable transactions
+- What's coming that might affect finances
+
+**Before flagging a charge as unknown or "needs categorization," check the "Known Charges & Learnings" section at the bottom of this file — if it's listed there, {{USER_NAME}} has already accounted for it; don't re-flag it.**
+
+**Examples of good correlations:**
+- "Dining out ran high over the period — you had dinner with a friend and hosted a group event"
+- "Grocery / household spending up ~40% this month — correlates with a big home-prep push on your calendar"
+- "Ride-share costs doubled vs last month — the rainy weeks pushed you off the bike commute"
+- "New subscription appeared this period — matches when you mentioned ramping up a side project"
+
+---
+
+## 4. Format Report
+
+**This is read on a phone.** No markdown tables — they render as broken text on most mobile messengers. Use bullet lists, bold, and emoji for visual hierarchy.
+
+### Structure (in this order):
+
+**1. Dashboard (5 seconds to scan)**
+Compact key metrics at the very top. One line per metric, emoji + bold:
+
+```
+💰 Net Worth: $1.07M (+$2K MoM)
+💵 Cash: $128K | Investments: $917K
+📊 Savings Rate: 75% YTD
+💳 Credit Cards: $26K outstanding
+```
+
+**2. ⚠️ Attention Required (if any)**
+Urgent or actionable items FIRST. 3-5 bullets max. Things that need a decision or action soon. If nothing urgent, skip this section entirely.
+
+**3. Spending by Category (this 30-day period)**
+Summarize where money went BEFORE listing individual transactions:
+
+```
+🍽️ Dining: $550 (46%)
+🛒 Groceries: $150 (12%)
+🐾 Pet: $120 (10%)
+📺 Subscriptions: $57 (5%)
+...
+```
+
+Then optionally list notable individual transactions below.
+
+**4. The Numbers**
+- This 30-day period: income, expenses, net
+- Year-to-date: same, savings rate
+
+Keep it tight. Bullets, not paragraphs.
+
+**5. Context & Commentary (brief)**
+2-4 sentences max connecting life events to spending patterns. Not a narrative essay — just the insight. Move any longer analysis to the very end as an optional "Notes" section if needed.
+
+### Formatting Rules:
+- **No markdown tables** — they break on mobile messaging
+- Use bullet lists and bold for structure
+- Emoji sparingly but strategically (visual anchors)
+- Target ~3,500 chars total (half of current length)
+- Lead with data, trail with commentary
+
+Tone: Concise, direct, useful. Not robotic, but not chatty either.
+
+---
+
+## 🔑 Auth Watch — lives in the weekly job
+
+The credential-expiry check lives in the **weekly** transactions job (`recurring/daily-transactions.md` → "Weekly Auth Watch"). Auth monitoring must stay weekly: at this job's monthly cadence a dead credential could sit ~4 weeks before alerting. Nothing to run in this job.
+
+---
+
+## 🚀 Delivery
+
+Write the report to `briefs_financial/monthly-YYYY-MM-DD.md`, then deliver:
+
+```bash
+python3 {{MINERU_HOME}}/scripts/deliver-output.py \
+  {{MINERU_HOME}}/briefs_financial/monthly-YYYY-MM-DD.md \
+  --imessage-keychain <second-recipient-keychain-service> \
+  --imessage-format monthly_finance
+```
+
+The `--imessage-*` pair is the **optional second-recipient arm**: it sends a reformatted iMessage copy to a household member who doesn't use Telegram. `--imessage-keychain` reads their number from a Keychain service you name (kept out of git); `--imessage-format monthly_finance` selects the "airy" financial treatment (strips `#` headers, inserts `┄` section dividers, keeps each line's existing emoji — see `lib/imessage_format.py`). The arm is non-fatal — a failure there never blocks the Telegram delivery. Drop both flags if the install has no second recipient. See `recurring/README.md` — delivery contract.
+
+---
+
+## Known Charges & Learnings (consult before flagging)
+
+Recurring or previously-explained charges — do **NOT** re-flag these as "unknown / needs categorization." {{USER_NAME}} has already accounted for them. Append new entries here as charges get explained over time.
+
+Format: one bullet per charge, naming the merchant/amount pattern and the reason it's expected. Example (placeholder — replace with real entries as they come up):
+
+- **Example: `EXAMPLE_MERCHANT` ~$XX, recurring** — annual subscription {{USER_NAME}} renews. Expected, not a mystery; don't flag.
+
+### Resolved / Confirmed — do NOT re-flag in ⚠️ Attention Required
+
+These were previously raised as attention items and are now resolved or confirmed by {{USER_NAME}}. Do not surface them again. Record each as: one bullet naming the pattern, the resolution, and the date {{USER_NAME}} confirmed it — so a later report doesn't re-raise it.

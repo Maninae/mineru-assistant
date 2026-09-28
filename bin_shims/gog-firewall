@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Legacy `gog-firewall` shim → POLYMORPHIC router into `mineru <noun> ...`.
+#
+# `gog-firewall`'s first argv is itself a verb (gmail, calendar, drive,
+# docs, sheets, contacts, tasks, people, groups, ...), so this shim is
+# NOT a naive `mineru gmail` wrapper — that would silently misroute
+# every non-gmail call. Instead, arg1 selects the mineru noun; the rest
+# of argv is forwarded verbatim. Unknown verbs fall through to the live
+# fallback so a legacy caller for a not-yet-wired subcommand keeps
+# working (compound-safety-net principle; see the LANDMINE in the
+# 2026-08-01 Phase-4 cutover doc §7).
+#
+# Routing table (kept in lock-step with bin_shims/README.md):
+#   gmail    → mineru gmail
+#   calendar → mineru calendar
+#   drive    → mineru drive
+#   docs     → mineru docs
+#   sheets   → mineru sheets
+#   contacts → mineru contacts
+#   tasks    → mineru tasks
+#   people   → mineru people
+#   groups   → mineru groups
+#   (anything else) → live $MINERU_HOME/bin/gog-firewall
+#
+# Healthy CLI: `gog-firewall gmail search foo` → `mineru gmail search foo`.
+# Broken/hung mineru or unknown verb: `exec $MINERU_HOME/bin/gog-firewall <argv>`.
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./_shim_lib.sh
+source "$SCRIPT_DIR/_shim_lib.sh"
+
+# `route <arg1>` is the polymorphism knob. Populates ROUTED_VERB with
+# the mineru noun on a hit, or an empty array on a miss.
+route() {
+    case "$1" in
+        gmail)    ROUTED_VERB=(gmail) ;;
+        calendar) ROUTED_VERB=(calendar) ;;
+        drive)    ROUTED_VERB=(drive) ;;
+        docs)     ROUTED_VERB=(docs) ;;
+        sheets)   ROUTED_VERB=(sheets) ;;
+        contacts) ROUTED_VERB=(contacts) ;;
+        tasks)    ROUTED_VERB=(tasks) ;;
+        people)   ROUTED_VERB=(people) ;;
+        groups)   ROUTED_VERB=(groups) ;;
+        *)        ROUTED_VERB=() ;;
+    esac
+}
+
+FALLBACK_BIN=${MINERU_HOME:-$HOME/.mineru}/bin/gog-firewall
+
+shim_route "$FALLBACK_BIN" "$@"

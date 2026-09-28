@@ -1,0 +1,6 @@
+# Daily Contacts & Group Members Sweep
+
+**When:** Daily 11:00 PM PT
+**Runner:** Plain bash (no LLM) — runs `scripts/run-group-members-sweep.sh` directly via launchd.
+
+Refreshes contact name mappings and detects new iMessage group chats. The full run output goes to `logs/group-members-sweep/YYYY-MM-DD_HH-MM-SS.log`; a two-line completion pointer is appended to `logs/cron/group-members-sweep/YYYY-MM-DD.log`. No Telegram delivery — this runs silently.

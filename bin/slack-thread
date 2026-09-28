@@ -1,0 +1,47 @@
+#!/bin/bash
+# slack-thread: Read a Slack thread (parent + replies) with user names resolved locally.
+# Usage: slack-thread <channel_id> <parent_ts> [limit]
+#
+# Wraps Slack's conversations.replies endpoint. Read-only, no writes.
+# Token comes from macOS Keychain under
+#   -a "${SLACK_KEYCHAIN_ACCOUNT:-mineru}" -s "${SLACK_KEYCHAIN_SERVICE:-slack-bot-token}"
+# The per-profile MINERU_KEYCHAIN_ACCOUNT / MINERU_HOME env vars the wrappers
+# export are honored via the same $SLACK_KEYCHAIN_ACCOUNT lookup as slack-read.
+
+set -e
+
+CHANNEL="${1:?Usage: slack-thread <channel_id> <parent_ts> [limit]}"
+TS="${2:?Usage: slack-thread <channel_id> <parent_ts> [limit]}"
+LIMIT="${3:-100}"
+CACHE="${MINERU_HOME:-$HOME/.mineru}/cache/slack-users.json"
+TOKEN=$(security find-generic-password -a "${SLACK_KEYCHAIN_ACCOUNT:-mineru}" -s "${SLACK_KEYCHAIN_SERVICE:-slack-bot-token}" -w 2>/dev/null) || { echo "Error: Slack token not in Keychain" >&2; exit 1; }
+
+if [[ ! -f "$CACHE" ]]; then
+  echo "Error: User cache not found at $CACHE" >&2
+  echo "Run: slack-refresh-users" >&2
+  exit 1
+fi
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://slack.com/api/conversations.replies?channel=$CHANNEL&ts=$TS&limit=$LIMIT" | \
+  jq --slurpfile users "$CACHE" '
+    if .ok == false then
+      {ok: false, error: .error}
+    else
+      {
+        ok: true,
+        channel: "'"$CHANNEL"'",
+        thread_ts: "'"$TS"'",
+        messages: [
+          .messages[] | {
+            ts,
+            user: ($users[0][.user].real_name // $users[0][.user].name // .user),
+            text,
+            reactions: [.reactions[]?.name],
+            thread_ts: .thread_ts,
+            parent_user_id: .parent_user_id
+          }
+        ]
+      }
+    end
+  '

@@ -1,0 +1,62 @@
+# Python venvs
+.venv/
+.venv*/
+.venv-amazon/
+__pycache__/
+**/__pycache__/
+*.pyc
+**/*.pyc
+.pytest_cache/
+
+# Python packaging / editable-install cruft
+*.egg-info/
+mineru_cli.egg-info/
+mineru_assistant.egg-info/
+build/
+dist/
+
+# macOS
+.DS_Store
+
+# Caches & runtime state
+cache/
+output/
+logs/
+*.log
+
+# Secrets: never commit tokens, keys, or credentials
+*.env
+.env.*
+*.secret
+*.key
+*.pem
+credentials*
+*token*.json
+*session*.json
+*cookie*.json
+*apikey*
+data/*.json
+cache/greenhouse-cookies.json
+
+# Editor / tool backups
+*.bak
+
+# --- Engine-repo hygiene: per-user runtime state and private data ---
+# Active-profile state and household roster (per-user, never in the engine repo)
+profiles/
+current
+humans.yaml
+landline.json
+
+# Private workspace data dirs (must never enter the public engine repo)
+memory/
+briefs_*/
+creations/
+owen_journal_exports/
+inbox/
+outbox/
+archive/
+
+# Arc-1 transient working artifacts (deleted after Arc 1 ships; not shipped)
+CONTRACTS.md
+KNOWN-INSTANCE-REFS.txt

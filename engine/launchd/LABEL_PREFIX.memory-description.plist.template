@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>{{USER_HOME}}</string>
+		<key>PATH</key>
+		<string>{{USER_HOME}}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<key>MINERU_HOME</key>
+		<string>{{MINERU_HOME}}</string>
+		<key>MINERU_KEYCHAIN_ACCOUNT</key>
+		<string>{{KEYCHAIN_ACCOUNT}}</string>
+		<key>MINERU_INJECT_QUEUE_DIR</key>
+		<string>{{MINERU_INJECT_QUEUE_DIR}}</string>
+	</dict>
+	<key>Label</key>
+	<string>{{LAUNCHD_PREFIX}}.memory-description</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>{{MINERU_HOME}}/scripts/trigger-memory-description-claude-code.sh</string>
+	</array>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>1</integer>
+		<key>Minute</key>
+		<integer>30</integer>
+	</dict>
+	<key>TimeOut</key>
+	<integer>3600</integer>
+	<key>WorkingDirectory</key>
+	<string>{{MINERU_HOME}}</string>
+</dict>
+</plist>

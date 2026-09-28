@@ -1,0 +1,74 @@
+# Recurring Tasks
+
+This directory holds the instruction markdown files for every scheduled {{PERSONA_NAME}} job. Each file is read by an isolated Claude Code headless session (launched via `scripts/trigger-*-claude-code.sh` + a launchd plist) and tells that session what to do, where to write output, and how to deliver it. Edit the markdown to change behavior — no need to update the cron job.
+
+## Active Jobs
+
+| Name | Schedule | Instruction File | Output Dir |
+|------|----------|------------------|------------|
+| Morning Briefing | 7:00 AM daily | `morning-brief.md` | `briefs_morning/` |
+| Local News Brief | Mon/Wed/Fri 11:00 AM | `news-brief.md` | `briefs_news/briefs/` |
+| Daily Transactions | Thu 10:00 PM (weekly, despite the name) | `daily-transactions.md` | `briefs_financial/` |
+| Monthly Financial Checkup | 1st Sunday 9:00 PM | `financial-checkup.md` | `briefs_financial/` |
+| Prompts Alignment | Tue/Fri 10:00 PM | `prompts-alignment.md` | `briefs_prompts_alignment/` |
+| Daily Consolidation (lightweight) | 1:00 AM daily | `consolidate-daily-memories.md` | `memory/daily/` |
+| Weekly Deep Consolidation | Mon 2:27 AM | `weekly-deep-consolidation.md` | `memory/` (in place) |
+| Memory Description | 1:30 AM daily | `memory-description-maintenance.md` | `memory/` (in place) |
+| Inbox Triage | Sun 2:00 PM | `inbox-triage.md` | `briefs_inbox/` |
+| Daily Curiosity Question | 11:30 AM daily | `daily-curiosity-question.md` | `briefs_curiosity/` |
+| Memory Dedup | Sunday 10:30 PM (weekly) | `memory-dedup.md` | `briefs_dedup/` |
+| Model Watch | Saturday 9:00 AM (weekly) | `model-watch.md` | `briefs_model_watch/` |
+| Contacts & Groups Sweep | 11:00 PM daily | `group-members-sweep.md` (plain bash) | `briefs_imsg_group_members_updates/` |
+| Journal Pre-Export | 12:45 AM daily | `pre-export-journals.md` (plain Python) | `journal_exports/` |
+| Keepsake Autodeploy | 3:00 AM daily | `scripts/keepsake-autodeploy.py` (plain Python, no instruction file) | keepsake repo |
+| Daemon Watchdog | every 5 min | `{{USER_DEV_ROOT}}/claude-landline/deploy/watchdog.sh` (plain bash) | `logs/` |
+| Cleanup Retention | 2nd of month 4:07 AM | `scripts/cleanup-retention.sh` (plain bash, no instruction file) | in-place (logs gzipped, briefs → `archive/briefs/`) |
+| Telegram Daemon | boot / always-on | Landline (`python3 -m landline`, `{{USER_DEV_ROOT}}/claude-landline`) | — |
+| {{PERSONA_NAME}} Web App | boot / always-on | `app/server.py` (port {{WEBAPP_PORT}}) | — |
+
+*Rows tagged `(plain bash/Python)` are listed for schedule audits only — launchd invokes their script directly, never `claude-fda -p`. Don't wire an LLM session at them.*
+
+See `prompts/TECHNICAL.md` for the canonical schedule with model assignments.
+
+## Paused Jobs (do not execute unless explicitly asked)
+
+List each paused or inactive recipe as one bullet so the alignment pass and readers can see it. A parked job keeps its instruction file in `recurring/` but has no active launchd plist. Shape:
+
+- **`<recipe-file-or-skill>`** — what it did, that it is paused (no launchd plist active), and whether its instructions are still valid as a manual playbook.
+
+(None in the starter set.)
+
+## Standard Delivery Contract
+
+Every active job MUST follow this contract — collapsed into one place so individual instruction files don't have to restate it:
+
+1. **Write the output to the job's brief directory** (e.g., `briefs_morning/morning-YYYY-MM-DD.md`). Always include today's date — derive it from the `date` command or the `<current_time>` block, **never** from training data.
+2. **Deliver via `python3 {{MINERU_HOME}}/scripts/deliver-output.py <path>`** — this is the only delivery path. The script handles Telegram formatting, chunking, and chat ID lookup.
+3. **Do NOT reformat the file before delivery.** Don't read it back, don't rewrite it, don't pipe it through anything. The file IS the message.
+4. **Do NOT send a confirmation message after delivery.** The report itself is the delivery — a follow-up "report delivered" message is redundant noise and double-delivers in Telegram.
+5. **On error, write a short status to the brief file and deliver THAT.** Never silently skip. {{USER_NAME}} needs to know when an upstream data source or credential fails (e.g. a CLI auth error, an expired API token, a search backend returning nothing) — write one line explaining what broke and deliver.
+6. **Deliver exactly once.** If new findings arrive late (e.g., a slow subagent), save them for the next run — don't overwrite and re-deliver.
+
+## Adding a New Recurring Task
+
+1. Create `task-name.md` with detailed instructions (assume the Standard Delivery Contract above is in effect).
+2. Add a launchd plist that triggers `scripts/trigger-task-name-claude-code.sh` (which runs `claude-fda -p` with the right `--model`).
+3. Hybrid principle: deterministic scripts for collection/delivery, LLM for analysis/writing.
+
+## ⚠️ Full Paths Required
+
+Cron jobs run in **isolated sessions** where workspace `bin/` is NOT in PATH. Always use fully qualified paths in instructions:
+
+```bash
+# ✅ CORRECT - full paths
+{{MINERU_HOME}}/bin/gog-firewall gmail thread modify <threadId> --remove UNREAD --no-input
+{{MINERU_HOME}}/bin/imsg-firewall chats --max 10
+
+# ❌ WRONG - will fail with "command not found"
+gog-firewall gmail thread modify <threadId> --remove UNREAD --no-input
+bin/gog-firewall gmail search "..."
+```
+
+(Gmail reads AND writes both go through `gog-firewall` — the Gmail MCP connector is retired; see `prompts/GMAIL.md`.)
+
+This applies to all custom scripts in `bin/` and `scripts/`.

@@ -1,0 +1,82 @@
+# Synthetic connectors fixture — pairs with profile.yaml in this dir.
+#
+# Every value is fake and has zero overlap with any real operator's install.
+# Same UPPERCASE keys as a real connectors.yaml so the fixture exercises the
+# same render-context shape; only the values differ.
+
+# --- Google Workspace (fake) --------------------------------------------
+
+USER_PRIMARY_EMAIL: sam@example.test
+
+PERSONAL_CALENDAR_ID: sample-personal-0000000000000000@group.calendar.example.test
+FAMILY_CALENDAR_ID: sample-family-0000000000000000@group.calendar.example.test
+CHURCH_CALENDAR_ID: sample-community-0000000000000000@group.calendar.example.test
+
+# --- Networking (fake) ---------------------------------------------------
+
+TAILSCALE_HOSTNAME: zephyr.tail0000ex.ts.net
+
+# --- Telegram / daemon (fake) -------------------------------------------
+
+TELEGRAM_BOT_SERVICE: zephyr-bot-token
+DAEMON_PERSONA_NAME: Postbird
+
+# --- Community (fake) ----------------------------------------------------
+
+CHURCH_NAME: Cedar Grove Fellowship
+
+# --- User phone (fake, non-routable range) -------------------------------
+
+USER_PHONE_NUMBER: "+15555550123"
+
+# --- Lists (fake) --------------------------------------------------------
+
+APPLE_NOTES_FOLDERS:
+  - name: "Work Log"
+  - name: "Home"
+  - name: "Reading Notes"
+  - name: "Trip Planning"
+
+BROWSER_PLATFORMS:
+  - name: DemoJobs
+  - name: SampleSocial
+
+RECURRING_JOBS:
+  - name: Sample Morning Brief
+    schedule: 7:00 AM daily
+    model: model-a
+    instruction_file: recurring/sample-morning.md
+  - name: Sample Weekly Check
+    schedule: Sun 8:00 PM
+    model: model-b
+    instruction_file: recurring/sample-weekly.md
+
+KEYCHAIN_SERVICES:
+  - service: zephyr-bot-token
+    purpose: Chat bot API token
+  - service: zephyr-webapp-passphrase-hash
+    purpose: Web app passphrase gate
+
+DEFAULT_MAIN_MODEL: model-alpha
+DEFAULT_SUBAGENT_MODEL: model-beta
+DEFAULT_DAEMON_MODEL: model-gamma
+
+# Finance CLI on this synthetic install (fake product, exercises the same
+# render-context shape as the real fixture).
+FINANCE_CLI_PRODUCT: SampleFinance
+FINANCE_CLI_BINARY_NAME: samplefin
+FINANCE_CLI_SKILL_NAME: sample-finance
+FINANCE_CLI_SUBCOMMANDS:
+  - cmd: samplefin transactions --days 7
+    comment: Recent transactions
+  - cmd: samplefin accounts
+    comment: All linked accounts
+  - cmd: samplefin budgets
+    comment: Budget status
+
+# Legacy (bare-name) skills — synthetic install-specific list; iterated
+# as scalar items with `{{.}}`.
+LEGACY_PREFIX_FREE_SKILLS:
+  - sample-vehicle
+  - sample-messaging-voice
+  - sample-community-prep

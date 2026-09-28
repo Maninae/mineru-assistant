@@ -1,0 +1,102 @@
+# Memory Frontmatter Maintenance (Descriptions + Tags)
+
+**When:** Daily 1:30 AM PT
+
+Nightly job to keep every structured memory file's YAML frontmatter accurate — both its `description:` and its `tags:`. Good frontmatter is what makes files discoverable: `description:` powers the annotated memory tree, and `tags:` power `msearch`'s tag search, which now indexes the **entire** `memory/` tree (not just daily logs). A file with no or weak tags is nearly invisible to tag search.
+
+## Scope
+
+All `.md` files in `memory/` **except**:
+- `memory/daily/` (session logs — skip entirely)
+- `memory/monthly/` (consolidation artifacts — skip)
+- `memory/README.md`
+- `memory/heartbeat-state.json`
+- Any non-markdown files
+
+## Process
+
+### Step 1: Scan files + load the existing tag vocabulary
+
+List all in-scope `.md` files under `memory/`.
+
+**Before assigning any tags, load the existing tag vocabulary** so new tags stay consistent — reuse existing tags instead of inventing near-synonyms:
+```bash
+{{MINERU_HOME}}/bin/msearch tags --count --pretty
+```
+Prefer an existing tag (`partner`, `pet`, `faith`, `home-city`) over a new synonym (`spouse`, `the-animal`, `christianity`, `hometown`). Consistency is the whole point of tag search — divergent synonyms fragment it.
+
+### Step 2: Check each file — description
+
+For each file, read it and check YAML frontmatter for a `description:` field.
+- **No frontmatter at all:** add a block with a concise one-line description (under 100 chars).
+- **Frontmatter but no `description:`:** add one.
+- **`description:` exists:** update only if stale or inaccurate; otherwise skip.
+
+### Step 3: Check each file — tags
+
+In the same pass, check the frontmatter for a `tags:` list.
+- **No `tags:`:** add one — 3–8 lowercase keywords covering the file's topics, people, places, and projects (names like `partner`/`child`, places like `home-city`, domains like `faith`/`finance`/`health`). Reuse the vocabulary from Step 1.
+- **`tags:` exists but is sparse or off:** add the obvious missing ones and fix clearly-wrong ones. Don't churn tags that are already fine.
+- **`tags:` is already good:** skip.
+- Always **preserve** meaningful existing tags — only add or refine, never strip a valid tag.
+
+Tags format (match existing convention): a YAML list of lowercase strings; single words or short phrases; hyphenate multiword slugs where the file already does (`home-city`), plain words otherwise.
+```yaml
+---
+description: "One-line summary of what this file contains"
+tags: [partner, health, appointments, planning]
+---
+```
+
+### Step 4: Rebuild annotated tree
+
+After processing all files:
+```bash
+bash {{MINERU_HOME}}/scripts/generate-memory-tree.sh {{MINERU_HOME}}
+```
+(Tags feed `msearch`'s own index, which refreshes on its next run — no manual rebuild needed here.)
+
+### Step 5: Report
+
+Brief bullet summary:
+- Files updated — description changes (old → new) and tag changes (added / fixed)
+- Files given new frontmatter (description and/or tags)
+- Files skipped (already accurate)
+- Total files scanned
+
+Keep it concise — bullet list, no verbose explanations.
+
+## Rules
+
+- **Never delete content.** Only add or edit frontmatter.
+- **Never strip a valid tag or description.** Only add or refine.
+- **Descriptions:** one line, under 100 characters — think file-browser tooltip.
+- **Tags:** lowercase; 3–8 per file; reuse the existing vocabulary (Step 1) over inventing synonyms; cover people, places, topics, projects.
+- **Don't over-describe.** "{{USER_NAME}}'s food preferences and dietary notes" not "A comprehensive document detailing {{USER_NAME}}'s various food preferences including but not limited to..."
+- **Use plain language.** No AI-speak (comprehensive, delve, landscape, etc.).
+- **Save a log entry** to `logs/cron/memory-description-maintenance/YYYY-MM-DD.log` (PST date) with:
+  - Timestamp
+  - Summary of what was done (files updated / added / skipped, for **both** descriptions and tags)
+  - Any errors or warnings
+  - Total files scanned and breakdown counts
+
+## Examples of good frontmatter
+
+```yaml
+---
+description: "50+ restaurants {{USER_NAME}} & household like — Asian, American, cafes. Local focus."
+tags: [food, restaurants, dining, local]
+---
+```
+```yaml
+---
+description: "{{USER_LOCATION}} home details — measurements, landlord, screen door, parking."
+tags: [home, home-city, rental, logistics]
+---
+```
+```yaml
+---
+description: "Partner's health timeline, symptoms, appointments, planning."
+tags: [partner, health, appointments, planning]
+---
+```

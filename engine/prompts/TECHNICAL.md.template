@@ -1,0 +1,180 @@
+# TECHNICAL.md - System Configuration
+
+Engine-level scaffolding: patterns, protocols, and the wiring shape common across installs. Per-install specifics (which models, which jobs, which paths, which launchd labels) live in `prompts/TECHNICAL.local.md`, imported at the end of this file.
+
+---
+
+## {{PERSONA_NAME}} Skills in Claude Code
+
+{{USER_NAME}}'s personal/daily-life skills are installed **globally in Claude Code** (source: `{{USER_DEV_ROOT}}/claude-toolkit/skills/`, symlinked into `{{USER_CLAUDE_HOME}}/skills/`), each prefixed **`{{PERSONA_NAME_LOWER}}__`** so they are easy to spot - e.g. `{{PERSONA_NAME_LOWER}}__recruiter-emails`, `{{PERSONA_NAME_LOWER}}__package-tracking`, `{{PERSONA_NAME_LOWER}}__grocery-prices`.
+
+- **How to find them:** scan the available-skills list for the **`{{PERSONA_NAME_LOWER}}__`** prefix. Those are {{USER_NAME}}'s life/workspace tasks (finances, package tracking, journaling, video extraction, listings, recruiter mgmt, medical reference, etc.). **When a task matches a `{{PERSONA_NAME_LOWER}}__` skill's trigger, read the full skill file** - same discipline as any other skill.
+- **They auto-trigger** in every CC session, including headless cron/daemon runs.
+- **Assumptions:** these skills freely assume `{{MINERU_HOME}}` exists and use workspace tools (`bin/msearch`, `bin/gog-firewall`, `bin/imsg-firewall`, etc.) - that is expected.
+- **Add/update a skill:** edit under `{{USER_DEV_ROOT}}/claude-toolkit/skills/{{PERSONA_NAME_LOWER}}__<name>/` (or via the `{{USER_CLAUDE_HOME}}/skills/` symlink) and run `/sync-claude-toolkit` to commit + push so all machines stay in sync.
+- **Earlier-migrated skills:** a few personal skills predate the double-underscore prefix and use bare names. That inventory is per-install and lives in `prompts/TECHNICAL.local.md`. The `{{PERSONA_NAME_LOWER}}__` prefix marks skills migrated as part of the daily-life-skills batch.
+
+---
+
+## Inbox & Outbox
+
+`inbox/` and `outbox/` are workspace folders for directed messages between agents or for drafts awaiting review. **Disambiguation:** When {{USER_NAME}} says "inbox" {{USER_PRONOUN_SUBJECT}} usually mean{{USER_VERB_S}} the **Gmail inbox** (email). The `{{MINERU_HOME}}/inbox/` folder is for cross-agent notes. Listen for context clues - "check my inbox" = email; "leave a note in the inbox" or "write to inbox" = the workspace inbox folder.
+
+---
+
+## SYSTEM CHANGE PROTOCOL
+
+**NEVER execute a system change without planning first.** Even if {{USER_NAME}} asks for an immediate change - STOP.
+
+1. **Plan** - what changes, what files/configs/cron jobs are affected, what could break.
+2. **Draft** - write out the specific edits, new code, config updates.
+3. **Await approval** - wait for explicit "go ahead" / "approved" / "do it". No implied approval.
+4. **Execute** - make the changes, verify each one worked.
+
+### Design Principle: LLMs for Thinking, Code for Plumbing
+
+Use LLMs for analysis, reasoning, judgment, creativity. Use deterministic code for everything else. Piping output, filtering messages, sending deliveries, file operations - solved problems. Do not risk stochastic outputs for mechanical tasks.
+
+| Task | Who should do it |
+|------|------------------|
+| Analyze spending patterns | LLM |
+| Write a thoughtful brief | LLM |
+| Send the brief to Telegram | Script |
+| Filter intermediate messages | Script |
+| Remember to do X every time | Config/script |
+| Make a judgment call | LLM |
+
+When you find yourself adding "always do X" to a prompt, ask: can this be a script instead?
+
+---
+
+## Claude Code vs Direct API Calls
+
+**Always use Claude Code (`claude-fda -p`)** for automated tasks - it runs on {{USER_NAME}}'s Max subscription (flat rate). **Never suggest direct Anthropic API calls** (`anthropic` SDK, `curl` to Messages API) - those are pay-per-token and expensive.
+
+This applies to: consolidation jobs, denoising, any headless Claude work. CC is the standard path.
+
+**Default model:** Per `{{USER_CLAUDE_HOME}}/settings.json`, the main session and subagents run configured defaults. The Telegram daemon runs its own configured model per `{{MINERU_HOME}}/landline.json`. Concrete model choices live in `prompts/TECHNICAL.local.md`. {{USER_NAME}} is OK with using a more powerful model even for mundane tasks - no need to add extra model flags unless {{USER_PRONOUN_SUBJECT}} specifically and explicitly ask{{USER_VERB_S}} for a cheaper/faster model.
+
+### When to Use Sub-Agents in Main Session
+
+**Use the Agent tool for any code-heavy work in the main session:**
+- PR investigations, CI failures, code tracing.
+- Exploring large codebases or repos.
+- Debugging across multiple files.
+- Any task that requires reading/navigating many source files.
+
+**Do not do code exploration manually** in the main session - it burns context tokens. Spawn a sub-agent instead.
+
+---
+
+## Claude Models (family reference)
+
+Anthropic model families you may encounter in this workspace. Which specific IDs this install uses today for main / subagent / daemon / recurring jobs lives in `prompts/TECHNICAL.local.md`.
+
+| Family | Notes |
+|-------|-------|
+| Fable 5.x (`claude-fable-5-1`, `claude-fable-5`) | Mythos-class tier - most capable generally-available family, sits above Opus. |
+| Opus 5.x (`claude-opus-5-5`, `claude-opus-5`) | Current Opus line; 1M-context variants available. |
+| Opus 4.x (`claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`) | Prior Opus flagship line; 1M-context variants available. |
+| Sonnet 5 / 4.x (`claude-sonnet-5`, `claude-sonnet-4-6`) | Opus-level performance at Sonnet cost; Sonnet 5 is cheaper than 4.6. |
+| Haiku 4.x (`claude-haiku-4-5`) | Fast and cheap, good for lightweight tasks. |
+
+**Recurring job model assignments:** most jobs default to a cost-efficient Sonnet tier to save Max quota. A short list of exceptions (jobs that need deeper reasoning) is tracked with the per-install job table in `prompts/TECHNICAL.local.md`.
+
+---
+
+## When Jobs Go Silent
+
+Two failure modes cause all cron jobs to stop delivering at once:
+
+**Auth expiry (401).** Claude Code's auth token expires, making every headless `claude-fda -p` job fail with `401 Invalid authentication credentials` (or `Failed to authenticate: OAuth session expired and could not be refreshed`). The key-icon alert fires; confirm with `claude-fda -p 'say hi'`; recovery is restarting the Mac (or re-logging-in CC).
+
+**Max budget cap ("session limit").** The Max subscription's session budget resets on a rolling schedule (the reset time varies and is printed in the error). Jobs that fire near the reset boundary can hit the cap and fail with `"You've hit your session limit"`. Symptom looks identical to auth expiry (burst of alerts, deliveries stop), but the fix is different: wait for the quota reset (no restart needed). To distinguish: check the job log for "session limit" / "resets" vs "401". Safe to re-run jobs after reset; `consolidate-daily-memories` has a date arg + idempotency guard (skips if the consolidated file already exists).
+
+**No automatic catch-up, by design.** A failed run is not re-fired; the next scheduled cycle picks up on its own (daily jobs the next day, weekly jobs the next week), so a failure costs at most one cycle of coverage. Do not propose a re-run script for this; re-run a job by hand only when a specific day's output matters.
+
+**Homebrew Python patch upgrades (silent break of venv-pinned + TCC-guarded launchd jobs).** Every `brew upgrade python@3.x` bumps the patch level and changes the interpreter's code signature. Two failure modes result: (1) venvs pinned to the old patch lose their linked stdlib and die on next launch - recreate the venv against the new binary; (2) launchd jobs that use AppleEvents (Notes/Contacts/etc.) lose their TCC "Automation" grant because macOS keys the grant on the binary signature, so the job silently fails with "Not authorized to send Apple events" (-1743). Policy: **launchd-invoked scripts that touch Notes/TCC use `/usr/bin/python3` (Apple stock, stable Apple-signed)** instead of `/opt/homebrew/bin/python3`. Which jobs are pinned this way on this install: `prompts/TECHNICAL.local.md`.
+
+Google auth is layered and each layer fails independently:
+- `gog` CLI OAuth expires on its own (~4 months); check `gog auth status`, fix via the `{{PERSONA_NAME_LOWER}}__gog-auth` skill.
+- The claude.ai Calendar MCP connector needs re-auth via `claude mcp login "claude.ai Google Calendar"` in an interactive session when its own token lapses. (The Gmail MCP connector is retired per `prompts/GMAIL.md`, so a Gmail-MCP outage does not block anything - Gmail runs on the `gog` CLI's own OAuth, refreshed via the `{{PERSONA_NAME_LOWER}}__gog-auth` skill.)
+- The Drive connector uses a separate login and often survives Gmail outages, which makes it a useful source-of-truth fallback mid-outage.
+
+---
+
+## Session Reset
+
+Automatic daily reset is **disabled**. {{USER_NAME}} manually runs `/new` when ready to reset. The heartbeat monitors context usage and alerts at 200K, then every 100K after that (300K, 400K, ... 900K), with urgent alerts at 950K+. The 1 AM consolidation job reads CC JSONL files directly for session persistence.
+
+---
+
+## Context Loading
+
+In Claude Code, context is loaded via two mechanisms:
+
+1. **CLAUDE.md `@imports`** - Static files referenced in CLAUDE.md (IDENTITY.md, SOUL.md, USER.md, MEMORY.md, AGENTS.md, TOOLS.md, prompts/GMAIL.md, prompts/GCALENDAR.md, prompts/TODO.md, prompts/TECHNICAL.md, SECURITY.md) are injected into every session automatically.
+2. **Warm resume script** - `scripts/warm_resume_new_session_with_context.sh` loads recent daily memories and today's session context at session start.
+
+### Memory Tree & Description System
+
+Each memory file can have a `description:` field in its YAML frontmatter:
+
+```yaml
+---
+description: "One-sentence summary of what the file covers, so an agent can decide whether to open it."
+tags: [category, subcategory]
+---
+```
+
+`scripts/generate-memory-tree.sh` produces an annotated directory tree with inline descriptions. Files without descriptions show no comment. The `daily/` and `monthly/` dirs are collapsed to summary lines (count only).
+
+**Maintenance:** A nightly launchd job loops through all memory files (excluding `daily/` and `monthly/`) and keeps their frontmatter accurate - adds/updates both `description:` (for the annotated tree) and `tags:` (for `msearch` tag search, which indexes the whole `memory/` tree), reusing the existing tag vocabulary for consistency. Instructions live in `recurring/memory-description-maintenance.md`.
+
+**Why:** The memory tree gives filenames but no signal about content. Descriptions let the agent decide whether to read a file without opening it - saves tokens and avoids blind spots.
+
+---
+
+## Recurring Tasks
+
+All recurring task instructions live in `recurring/`. All jobs run via macOS launchd (`{{USER_HOME}}/Library/LaunchAgents/`).
+
+### How Recurring Jobs Deliver Output
+
+Most recurring jobs run as **isolated CC headless sessions** - separate agent instances with their own tool calls and context. They are NOT part of the main session. The typical flow:
+
+1. launchd triggers a bash script (`scripts/trigger-*-claude-code.sh`).
+2. The trigger script runs `claude-fda -p` (CC headless) with the job's instruction file.
+3. That session does its work (reads calendar, searches Gmail, fetches weather, etc.).
+4. It writes output to a file (e.g., `briefs_morning/morning-<date>.md`).
+5. `scripts/deliver-output.py` sends the file contents to **Telegram** via the Bot API.
+
+**Important for main session:** These delivered messages arrive in {{USER_NAME}}'s Telegram chat. But **you (the main session instance) did not make those tool calls** - a separate isolated instance did. Do not confuse their output with your own work.
+
+The concrete schedule (which jobs are enabled, when they fire, which model each uses, which instruction file drives them) is per-install and lives in `prompts/TECHNICAL.local.md`.
+
+**Invariant:** never describe a job as scheduled (here or in any always-loaded file) unless a matching plist exists in `{{USER_HOME}}/Library/LaunchAgents/`. Check there first when adding or auditing rows.
+
+---
+
+## Directory Structure
+
+High-level layout (run `ls {{MINERU_HOME}}/` for the full snapshot):
+
+- `prompts/` - Always-loaded via CLAUDE.md @imports (GMAIL, GCALENDAR, TODO, TECHNICAL).
+- `recurring/` - Instruction markdown for each cron job. Paused jobs keep their instruction files here; only their **outputs** are archived under `archive/paused-jobs/` (see `recurring/README.md`).
+- `memory/` - `daily/` session logs + structured subfolders (a per-user namespace folder plus people, projects, places, faith, social, travel, lifestyle, recipes, events, monthly, archive/).
+- `briefs_*/` - One output dir per recurring job.
+- Telegram daemon - lives in its own repo (see `TOOLS.md` -> Telegram); the workspace keeps only `landline.json`, the `scripts/launchd/` plists, and `bin/restart-daemon.sh`.
+- `browser/` - Playwright browser automation server (port 9471).
+- `scripts/` - Trigger scripts, delivery helper, firewall, memory tooling.
+- `bin/` - CLI tools symlinked to `{{USER_HOME}}/.local/bin` (msearch, gog-firewall, imsg-firewall, browser, and friends); also `restart-daemon.sh` and `imsg-named` (present but FORBIDDEN for reads - use `imsg-firewall`).
+- `lib/` - Shared Python modules.
+- `logs/` - Per-job rotating logs.
+- `reports/` - Ad-hoc research artifacts.
+- `cache/`, `inbox/`, `outbox/`, `creations/` - runtime state and scratch space.
+- `app/` - {{PERSONA_NAME}} web-app source and launchd plist (if the web app is installed).
+
+---
+
+@prompts/TECHNICAL.local.md

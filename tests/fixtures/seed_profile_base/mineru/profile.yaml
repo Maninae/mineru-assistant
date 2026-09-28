@@ -1,0 +1,28 @@
+# Synthetic seed profile for the test suite.
+#
+# A generic, PII-free `mineru` profile the pytest suite loads via
+# `load_active_profile("mineru", base_dir=<this dir's parent>)`. All values
+# are fictional (no real user / paths / calendar ids). The profile NAME
+# `mineru` and the `com.mineru` launchd prefix are the FRAMEWORK namespace,
+# permanent and correct; everything else is a placeholder a real install
+# overrides via its own profile.yaml.
+
+name: mineru
+display_name: Example User
+assistant_name: Mineru
+timezone: America/Los_Angeles
+
+keychain_account: mineru
+launchd_label_prefix: com.mineru
+
+workspace_absolute: /Users/example/.mineru
+memory_root: /Users/example/.mineru/memory
+briefs_root: /Users/example/.mineru
+
+journal_apple_notes_folder: Daily Journals
+
+secrets:
+  backends:
+    - env
+    - keychain
+  env_prefix: MINERU_SECRET_

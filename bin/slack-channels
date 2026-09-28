@@ -1,0 +1,58 @@
+#!/bin/bash
+# slack-channels: List Slack channels the bot can see (id, name, membership).
+# Usage: slack-channels [--include-private] [--limit N]
+#
+# Wraps Slack's conversations.list endpoint. Read-only.
+# Default types=public_channel. With --include-private:
+# types=public_channel,private_channel (private only surfaces channels the
+# bot is a member of, since Slack scopes visibility to membership).
+# Does NOT require the user cache — channel names come back directly.
+
+set -e
+
+TYPES="public_channel"
+LIMIT="200"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --include-private)
+      TYPES="public_channel,private_channel"
+      shift
+      ;;
+    --limit)
+      LIMIT="${2:?--limit requires a value}"
+      shift 2
+      ;;
+    *)
+      echo "Error: unknown arg: $1" >&2
+      echo "Usage: slack-channels [--include-private] [--limit N]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+TOKEN=$(security find-generic-password -a "${SLACK_KEYCHAIN_ACCOUNT:-mineru}" -s "${SLACK_KEYCHAIN_SERVICE:-slack-bot-token}" -w 2>/dev/null) || { echo "Error: Slack token not in Keychain" >&2; exit 1; }
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://slack.com/api/conversations.list?types=$TYPES&exclude_archived=true&limit=$LIMIT" | \
+  jq '
+    if .ok == false then
+      {ok: false, error: .error}
+    else
+      {
+        ok: true,
+        channels: [
+          .channels[] | {
+            id,
+            name,
+            is_private,
+            is_member,
+            is_archived,
+            num_members,
+            topic: .topic.value,
+            purpose: .purpose.value
+          }
+        ]
+      }
+    end
+  '
