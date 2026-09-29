@@ -7,9 +7,12 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
-        <string>{{MINERU_HOME}}/scripts/export-journals.py</string>
-        <string>30</string>
+        <!-- Runs through bash like every other job: the TCC grant that lets a launchd
+             job read the Notes store is attached to the job's first process, and the
+             direct python3 form was denied ("authorization denied") on every run. -->
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>/usr/bin/python3 {{MINERU_HOME}}/scripts/export-journals.py 30</string>
     </array>
 
     <key>StartCalendarInterval</key>
