@@ -151,6 +151,7 @@ from browser.config import (  # noqa: F401  (re-exported for compatibility)
     USE_CLOAK,
     logger,
 )
+from browser.playwright_owner_thread import PlaywrightOwnerThread, runs_on_owner_thread
 from browser.tab_event_bus import TabEventBus
 from browser.tab_snapshot_writer import SnapshotWriter
 
@@ -185,6 +186,9 @@ class BrowserManager:
         snapshot_writer: Optional[SnapshotWriter] = None,
     ) -> None:
         self._lock = threading.RLock()
+        # Every Playwright object is created and used on this one thread;
+        # see browser/playwright_owner_thread.py for why.
+        self._owner_thread = PlaywrightOwnerThread()
         self._playwright = None  # type: Any
         self._browser = None  # type: Any
         self._context = None  # type: Any
@@ -559,6 +563,7 @@ class BrowserManager:
     # Public actions
     # ------------------------------------------------------------------
 
+    @runs_on_owner_thread
     def open_tab(
         self,
         url: str,
@@ -671,6 +676,7 @@ class BrowserManager:
         self._publish_and_trigger("opened", target_id)
         return result
 
+    @runs_on_owner_thread
     def snapshot(self, target_id: str) -> Dict[str, Any]:
         with self._lock:
             page = self._tabs.get(target_id)
@@ -687,6 +693,7 @@ class BrowserManager:
                 meta["lastActivityAt"] = self._now_iso()
             return result
 
+    @runs_on_owner_thread
     def act(self, target_id: str, request: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
             page = self._tabs.get(target_id)
@@ -698,6 +705,7 @@ class BrowserManager:
 
             return actions.dispatch(page, get_cdp, self._refs, target_id, request)
 
+    @runs_on_owner_thread
     def evaluate(self, target_id: str, expression: str, arg: Any = None) -> Dict[str, Any]:
         """Execute JavaScript in the page context and return the result.
 
@@ -723,6 +731,7 @@ class BrowserManager:
                 result = page.evaluate(expression)
             return {"action": "evaluate", "result": result}
 
+    @runs_on_owner_thread
     def responsebody(self, target_id: str, url_pattern: str, timeout_ms: int = 10000) -> Dict[str, Any]:
         """Navigate or wait, then capture the response body matching a URL pattern."""
         with self._lock:
@@ -758,6 +767,7 @@ class BrowserManager:
                 "body": captured.get("body"),
             }
 
+    @runs_on_owner_thread
     def navigate(self, target_id: str, url: str, timeout_ms: int = 30000) -> Dict[str, Any]:
         """Navigate an existing tab to a new URL."""
         with self._lock:
@@ -782,6 +792,7 @@ class BrowserManager:
                 "title": page.title(),
             }
 
+    @runs_on_owner_thread
     def wait(self, target_id: str, timeout_ms: int = 2000, until: str = "networkidle") -> Dict[str, Any]:
         """Wait for page activity to settle. until: 'networkidle' | 'domcontentloaded' | 'load'."""
         with self._lock:
@@ -796,6 +807,7 @@ class BrowserManager:
                 pass
             return {"targetId": target_id, "url": page.url, "until": state}
 
+    @runs_on_owner_thread
     def upload(self, target_id: str, ref: str, paths: List[str], via_click: bool = False) -> Dict[str, Any]:
         """Upload files.
 
@@ -841,6 +853,7 @@ class BrowserManager:
                 "via_click": via_click,
             }
 
+    @runs_on_owner_thread
     def screenshot(
         self,
         target_id: str,
@@ -896,6 +909,7 @@ class BrowserManager:
 
             return result
 
+    @runs_on_owner_thread
     def close_tab(self, target_id: str) -> Dict[str, Any]:
         with self._lock:
             page = self._tabs.get(target_id)
@@ -933,6 +947,7 @@ class BrowserManager:
         self._publish_and_trigger("closed", target_id, tab_snapshot=snapshot)
         return {"targetId": target_id, "status": "closed"}
 
+    @runs_on_owner_thread
     def list_tabs(self) -> List[Dict[str, Any]]:
         """Return the enriched per-tab view (spec §4.3 layer 2).
 
@@ -1020,6 +1035,7 @@ class BrowserManager:
             raise ValueError("Cookie path cannot be $MINERU_HOME itself (%s)" % home)
         return str(resolved)
 
+    @runs_on_owner_thread
     def cookies(self, operation: str, path: Optional[str] = None,
                 domain: Optional[str] = None) -> Dict[str, Any]:
         """Cookie management. Export requires explicit path (no default dump).
@@ -1083,6 +1099,7 @@ class BrowserManager:
             else:
                 raise ValueError("Unknown cookie operation: %s (use export/import/list)" % operation)
 
+    @runs_on_owner_thread
     def status(self) -> Dict[str, Any]:
         with self._lock:
             browser_ok = False
@@ -1102,6 +1119,7 @@ class BrowserManager:
                 "port": PORT,
             }
 
+    @runs_on_owner_thread
     def shutdown(self) -> None:
         with self._lock:
             self._cleanup_browser()

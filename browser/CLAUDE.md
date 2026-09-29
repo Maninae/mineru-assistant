@@ -35,7 +35,7 @@ python3 -c "import py_compile, glob; [py_compile.compile(f, doraise=True) for f 
                               │ HTTP POST /action
                               ▼
             ┌──────────────────────────────────┐
-            │  server.py  (HTTPServer:9471)    │
+            │  server.py (ThreadingHTTPServer) │
             │  ┌────────────────────────────┐  │
             │  │  BrowserManager            │  │  ← OWNS the threading.Lock
             │  │   _lock, _context,         │  │
@@ -69,11 +69,14 @@ python3 -c "import py_compile, glob; [py_compile.compile(f, doraise=True) for f 
 | `lifecycle.py` | `launch_context()` and `cleanup()` — the 3-mode browser launch (CDP / CloakBrowser / standalone fallback), teardown of context/CDP sessions/playwright/stealth CM. Uses **lazy imports** for `sync_playwright`, `Stealth`, `cloakbrowser` so the module is cheap to load. | The lock. The tab dict (mutates a passed-in dict; doesn't own it). HTTP. |
 | `accessibility.py` | `RefRegistry` class (assigns `e1`, `e2`, … to interactive elements) and `build_snapshot()` (CDP `Accessibility.getFullAXTree` → flat indented text + ref map, with ARIA fallback). Owns the role-filtering logic. | The lock. CDP session creation. Action execution. |
 | `actions.py` | All element-interaction primitives: `resolve_element`, `cdp_center`, `humanized_move_and_click`, `clear_field`, and the action handlers (`act_click`, `act_type`, `act_fill`, `act_select`, `act_check`, `act_hover`, `act_scroll`, `act_scroll_into_view`, `act_click_coords`). Plus the `dispatch()` router. All functions are **stateless** — they take `(page, cdp, backend_id, ...)` and return a result dict. | The lock. CDP session caching. Ref→backend_id lookup (caller passes `ref_info` in). |
-| `server.py` | `BrowserManager` (single `threading.Lock`, tab dict, CDP session cache, registry), `BrowserHandler` (HTTP routing on `/health`, `/tabs`, `/action`), PID file management, signal handlers, the `main()` entrypoint, screenshot/cookie/upload methods that don't belong in helpers. | Stealth/launch details. Action implementations. Accessibility tree walking. |
+| `playwright_owner_thread.py` | `PlaywrightOwnerThread` (the one thread that creates and uses every Playwright object; FIFO queue, inline re-entry) and the `@runs_on_owner_thread` decorator. | Browser state. The lock. |
+| `server.py` | `BrowserManager` (single `threading.RLock`, tab dict, CDP session cache, registry), `BrowserHandler` (HTTP routing on `/health`, `/tabs`, `/action`), PID file management, signal handlers, the `main()` entrypoint, screenshot/cookie/upload methods that don't belong in helpers. | Stealth/launch details. Action implementations. Accessibility tree walking. |
 
 ---
 
 ## Key Design Decisions
+
+**All Playwright calls run on one owner thread (`playwright_owner_thread.py`).** Playwright's sync API is bound to the thread that started it, and the server is a `ThreadingHTTPServer` (a fresh thread per request). So every public `BrowserManager` method is decorated `@runs_on_owner_thread`, which hands the call to a single long-lived `playwright-owner` thread and waits for the result. Calls from the owner thread itself (Playwright event callbacks) run inline. Any new public method that touches Playwright MUST carry the decorator, or it fails with greenlet's "cannot switch to a different thread" once the launching request's thread has exited. Regression test: `tests/test_browser_thread_affinity.py` (set `MINERU_BROWSER_REAL_LAUNCH_TEST=1` and run under the stealth-capable Python for the real-Chromium variant).
 
 **BrowserManager is the only thing that holds the lock.** Every public method (`open_tab`, `snapshot`, `act`, `navigate`, `upload`, `screenshot`, `cookies`, `close_tab`, `list_tabs`, `evaluate`, `responsebody`, `wait`, `status`, `shutdown`) wraps its body in `with self._lock:`. Helpers in `actions.py`/`lifecycle.py`/`accessibility.py` **assume the caller already holds it** — they take primitive args, not the manager. This makes the locking story trivial to audit: search for `self._lock` in `server.py` and you've seen every critical section.
 
