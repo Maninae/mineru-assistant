@@ -202,19 +202,28 @@ def write_exports(entries):
         with open(os.path.join(tmp_dir, "_index.json"), "w") as f:
             json.dump(index, f, indent=2, ensure_ascii=False)
 
-        # Atomic swap: remove old dir, rename tmp to target
-        if os.path.exists(EXPORT_DIR):
-            backup = EXPORT_DIR + ".bak"
-            if os.path.exists(backup):
-                shutil.rmtree(backup)
-            os.rename(EXPORT_DIR, backup)
+        # Atomic swap inside the REAL export directory. EXPORT_DIR may be a
+        # symlink into the profile (the workspace links data dirs from
+        # profiles/<name>/); swapping the link itself would strand the data
+        # and leave a real dir at the root, so rotate the resolved target.
+        export_real = os.path.realpath(EXPORT_DIR)
+        backup = export_real + ".bak"
+        if os.path.exists(export_real):
+            if os.path.lexists(backup):
+                if os.path.islink(backup):
+                    os.unlink(backup)
+                else:
+                    shutil.rmtree(backup)
+            os.rename(export_real, backup)
 
-        os.rename(tmp_dir, EXPORT_DIR)
+        os.rename(tmp_dir, export_real)
 
         # Clean up backup
-        backup = EXPORT_DIR + ".bak"
-        if os.path.exists(backup):
-            shutil.rmtree(backup)
+        if os.path.lexists(backup):
+            if os.path.islink(backup):
+                os.unlink(backup)
+            else:
+                shutil.rmtree(backup)
 
         return exported
 
