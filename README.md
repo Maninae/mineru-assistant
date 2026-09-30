@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner/banner.png" alt="mineru: a neon aurora fox glyph drawn as one line of mineru CLI commands, beside a terminal running mineru setup, memory warm-resume, and cron status" width="820">
+  <img src="assets/banner/banner.png" alt="mineru: the aurora fox logo, its neon strokes filled with mineru CLI commands, beside a terminal running mineru setup, memory warm-resume, and cron status" width="820">
 </p>
 
 Clone one engine, hydrate your own private AI assistant.
