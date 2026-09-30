@@ -19,8 +19,8 @@ BANNER_DIR = Path(__file__).resolve().parent
 OUTPUT_PNG = BANNER_DIR / "banner.png"
 FONT_CACHE_DIR = Path.home() / ".cache" / "banner-fonts"
 FONT_WEIGHTS = (400, 600, 800)
-FOX_CENTER = (384, 372)
-FOX_SCALE = 1.12
+FOX_CENTER = (452, 356)
+FOX_SCALE = 0.92
 
 TERMINAL_SESSION = [
     ("command", "mineru setup"),
@@ -72,11 +72,18 @@ body{{width:1280px;height:720px;background:var(--bg);color:var(--ink);font-famil
 svg{{position:absolute;left:0;top:0}}
 svg text{{font-family:JBM,monospace;white-space:pre}}
 .outline{{fill:var(--fox);font-size:12.5px;font-weight:600}}
+.fur{{fill:var(--fox);font-size:10.5px;font-weight:600}}
 .detail{{fill:var(--fox-deep);font-size:9.5px}}
-.eye{{fill:var(--cream);font-size:12.5px;font-weight:800}}
-.tick{{fill:var(--fur);font-size:10px}}
+.eye{{fill:var(--cream);font-size:12px;font-weight:800}}
+.eye-lower{{fill:var(--fur);font-size:12px}}
+.blaze{{fill:var(--fur);font-size:9px}}
+.tail{{fill:var(--fox);font-size:11.5px;font-weight:600}}
+.tail-inner{{fill:var(--fox-deep);font-size:11.5px;font-weight:600}}
+.tail-core{{fill:var(--fur);font-size:9px}}
+.tip-text{{fill:var(--cream);font-size:12px;font-weight:800}}
 .nose{{fill:var(--cream)}}
 .tip{{fill:var(--cream)}}
+.pupil{{fill:var(--cream)}}
 .side{{position:absolute;left:800px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:34px}}
 h1{{font-size:40px;font-weight:800;letter-spacing:-1px}}
 .tagline{{font-size:17px;color:var(--dim);margin-top:10px;line-height:1.5}}

@@ -15,41 +15,59 @@ Each path is `[start, [(control1, control2, end), ...]]`, a chain of cubic Bezie
 """
 import html
 
-# Right-half head outline, chin to brow: chin -> jaw -> cheek -> ear outer edge -> ear tip -> ear inner edge -> brow.
-HEAD_OUTLINE = [(0, 232), [
-    ((70, 206), (128, 168), (166, 128)),      # chin to jaw, nearly straight so the chin stays sharp
-    ((200, 90), (222, 30), (226, -50)),       # jaw up the cheek
-    ((208, -110), (192, -180), (176, -256)),  # cheek up the outer ear edge to the tip
-    ((150, -210), (114, -160), (78, -116)),   # ear tip down the inner ear edge
+# Right-half head outline, chin to ear tip: the jaw flows out into the cheek, the ear bows outward and hooks in at the tip.
+HEAD_OUTLINE = [(0, 202), [
+    ((44, 206), (112, 188), (152, 148)),      # chin out along the jaw
+    ((198, 104), (226, 40), (218, -40)),      # cheek rising under the ear
+    ((234, -126), (214, -204), (152, -264)),  # outer ear, bowed outward, curling in at the tip
+    ((122, -216), (96, -160), (70, -118)),    # inner ear back down to the brow
 ]]
 # The brow spans both halves as one run, so the word at the centre of the forehead is unbroken.
-BROW = [(-78, -116), [((-30, -92), (30, -92), (78, -116))]]
+BROW = [(-70, -118), [((-26, -96), (26, -96), (70, -118))]]
 # A second stroke just inside the ear, the inner ear.
-INNER_EAR = [(168, -220), [((150, -186), (130, -150), (104, -122))]]
-# The eye: a lifted arc, so the fox reads calm rather than fierce.
-EYE = [(52, -22), [((70, -40), (108, -46), (134, -30))]]
-# The muzzle: a stroke from under the eye converging on the nose.
-MUZZLE = [(96, 36), [((80, 84), (54, 130), (24, 160))]]
-# The nose: a small filled diamond at the tip of the muzzle (local coords, drawn as a polygon).
-NOSE_POLYGON = [(0, 162), (8, 170), (0, 180), (-8, 170)]
-# Cheek fur: two short ticks off the jaw.
-CHEEK_TICKS = [
-    [(176, 62), [((196, 68), (216, 76), (238, 84))]],
-    [(150, 118), [((172, 126), (194, 136), (214, 148))]],
+INNER_EAR = [(150, -236), [((148, -190), (128, -150), (96, -124))]]
+# The face mask: from the ear base, around the outside of the eye, into the muzzle and the nose.
+MASK = [(84, -96), [((136, -64), (154, 0), (126, 54)), ((104, 96), (64, 132), (26, 152))]]
+# The eye: an almond, slanted up and outward. Upper lid dense and bright, lower lid faint.
+EYE_UPPER = [(46, -18), [((70, -48), (112, -58), (140, -40))]]
+EYE_LOWER = [(50, -10), [((76, 4), (112, -6), (136, -32))]]
+PUPIL_POINTS = [(96, -30), (-96, -30)]
+# Cheek fur: three sweeps flowing out and down from the jaw, like a ruff.
+CHEEK_FUR = [
+    [(150, 130), [((190, 128), (222, 140), (248, 168))]],
+    [(134, 158), [((170, 166), (196, 188), (208, 220))]],
+    [(104, 184), [((132, 198), (146, 220), (150, 246))]],
 ]
-# Ear marks: the tips carry a single bright dot.
-EAR_TIP_POINTS = [(176, -256), (-176, -256)]
+# The blaze: a faint dotted line down the centre of the forehead.
+BLAZE = [(0, -86), [((0, -60), (0, -30), (0, -2))]]
+# The nose: a small filled diamond at the tip of the muzzle (local coords, drawn as a polygon).
+NOSE_POLYGON = [(0, 160), (8, 168), (0, 178), (-8, 168)]
+# The tail: a teardrop that starts below the chin, sweeps left and curls up beside the head, cream at the tip.
+# Outer and inner edges carry commands; two dotted cores fill the body so it reads bushy, not as a single line.
+TAIL_OUTER = [(40, 300), [((-150, 380), (-410, 300), (-402, 80)), ((-396, -100), (-316, -222), (-236, -250))]]
+TAIL_INNER = [(0, 286), [((-130, 336), (-326, 276), (-326, 80)), ((-326, -60), (-280, -180), (-236, -250))]]
+TAIL_CORES = [
+    [(26, 295), [((-142, 364), (-380, 292), (-376, 80)), ((-372, -86), (-302, -208), (-236, -250))]],
+    [(12, 290), [((-136, 350), (-352, 284), (-350, 80)), ((-348, -72), (-290, -194), (-236, -250))]],
+]
+TAIL_TIP = [(-262, -222), [((-244, -250), (-218, -276), (-190, -298))]]
+EAR_TIP_POINTS = [(152, -264), (-152, -264)]
 
 OUTLINE_WORDS = ("mineru setup mineru profile install --apply mineru memory warm-resume "
                  "mineru secrets set mineru cron status mineru memory consolidate").split()
+TAIL_WORDS = ("mineru profile export mineru memory backup mineru cron install --dry-run "
+              "mineru calendar list mineru gmail search mineru telegram send mineru memory tree").split()
 DETAIL_WORDS = ["profile", "memory", "secrets", "cron", "calendar", "gmail", "telegram", "browser",
                 "warm-resume", "consolidate", "backup", "tree", "reindex", "validate", "export"]
 
 FONT_PX_BY_ROLE = {
     "outline": 12.5,
+    "fur": 10.5,
     "detail": 9.5,
-    "eye": 12.5,
-    "tick": 10,
+    "eye": 12,
+    "tail": 11.5,
+    "tail_core": 9,
+    "blaze": 9,
 }
 MONO_ADVANCE_EM = 0.6  # JetBrains Mono glyph width as a fraction of font size
 JOINT_GAP_CHARS = 2
@@ -133,23 +151,40 @@ def fox_svg(center_x: float, center_y: float, scale: float) -> str:
     detail_offset = 0
     for mirrored in (False, True):
         for run_index, run in enumerate(each_segment_as_run(HEAD_OUTLINE, mirrored)):
-            rotation = (run_index * OUTLINE_WORD_STEP) % len(OUTLINE_WORDS)
+            rotation = ((run_index + 2) * OUTLINE_WORD_STEP) % len(OUTLINE_WORDS)
             words = OUTLINE_WORDS[rotation:] + OUTLINE_WORDS[:rotation]
             add_text_on_path(run, pack_words_onto_curve(words, arc_length(run, scale), FONT_PX_BY_ROLE["outline"], False), "outline")
-        for detail in (INNER_EAR, MUZZLE):
+        for fur in CHEEK_FUR:
+            rotation = detail_offset % len(DETAIL_WORDS)
+            detail_offset += DETAIL_WORD_STEP
+            words = (" · ".join(DETAIL_WORDS[rotation:] + DETAIL_WORDS[:rotation]) + " ·").split()
+            for run in each_segment_as_run(fur, mirrored):
+                add_text_on_path(run, pack_words_onto_curve(words, arc_length(run, scale), FONT_PX_BY_ROLE["fur"], True), "fur")
+        for detail in (INNER_EAR, MASK):
             rotation = detail_offset % len(DETAIL_WORDS)
             detail_offset += DETAIL_WORD_STEP
             words = (" · ".join(DETAIL_WORDS[rotation:] + DETAIL_WORDS[:rotation]) + " ·").split()
             for run in each_segment_as_run(detail, mirrored):
                 add_text_on_path(run, pack_words_onto_curve(words, arc_length(run, scale), FONT_PX_BY_ROLE["detail"], True), "detail")
-        for run in each_segment_as_run(EYE, mirrored):
-            add_text_on_path(run, repeat_pattern_onto_curve("• ", arc_length(run, scale), FONT_PX_BY_ROLE["eye"]), "eye")
-        for tick in CHEEK_TICKS:
-            for run in each_segment_as_run(tick, mirrored):
-                add_text_on_path(run, repeat_pattern_onto_curve("- ", arc_length(run, scale), FONT_PX_BY_ROLE["tick"]), "tick")
+        for run in each_segment_as_run(EYE_UPPER, mirrored):
+            add_text_on_path(run, repeat_pattern_onto_curve("•", arc_length(run, scale), FONT_PX_BY_ROLE["eye"]), "eye")
+        for run in each_segment_as_run(EYE_LOWER, mirrored):
+            add_text_on_path(run, repeat_pattern_onto_curve("· ", arc_length(run, scale), FONT_PX_BY_ROLE["eye"]), "eye-lower")
     for run in each_segment_as_run(BROW):
         add_text_on_path(run, pack_words_onto_curve(OUTLINE_WORDS, arc_length(run, scale), FONT_PX_BY_ROLE["outline"], False), "outline")
+    for run in each_segment_as_run(BLAZE):
+        add_text_on_path(run, repeat_pattern_onto_curve("· ", arc_length(run, scale), FONT_PX_BY_ROLE["blaze"]), "blaze")
+    for stroke, css_class, role in ((TAIL_OUTER, "tail", "tail"), (TAIL_INNER, "tail-inner", "tail")):
+        for run_index, run in enumerate(each_segment_as_run(stroke)):
+            rotation = (run_index * OUTLINE_WORD_STEP) % len(TAIL_WORDS)
+            words = TAIL_WORDS[rotation:] + TAIL_WORDS[:rotation]
+            add_text_on_path(run, pack_words_onto_curve(words, arc_length(run, scale), FONT_PX_BY_ROLE[role], True), css_class)
+    for core in TAIL_CORES:
+        for run in each_segment_as_run(core):
+            add_text_on_path(run, repeat_pattern_onto_curve("· ", arc_length(run, scale), FONT_PX_BY_ROLE["tail_core"]), "tail-core")
+    for run in each_segment_as_run(TAIL_TIP):
+        add_text_on_path(run, repeat_pattern_onto_curve("•", arc_length(run, scale), FONT_PX_BY_ROLE["eye"]), "tip-text")
+    points = lambda pts, r, cls: "".join(f'<circle cx="{center_x + x * scale:.1f}" cy="{center_y + y * scale:.1f}" r="{r}" class="{cls}"/>' for x, y in pts)  # noqa: E731
     nose = '<polygon class="nose" points="' + " ".join(f"{center_x + x * scale:.1f},{center_y + y * scale:.1f}" for x, y in NOSE_POLYGON) + '"/>'
-    ear_tips = nose + "".join(f'<circle cx="{center_x + x * scale:.1f}" cy="{center_y + y * scale:.1f}" r="3.2" class="tip"/>'
-                       for x, y in EAR_TIP_POINTS)
-    return f'<defs>{"".join(path_defs)}</defs>{"".join(text_elements)}{ear_tips}'
+    marks = nose + points(EAR_TIP_POINTS, 3.2, "tip") + points(PUPIL_POINTS, 4.2, "pupil")
+    return f'<defs>{"".join(path_defs)}</defs>{"".join(text_elements)}{marks}'
