@@ -19,8 +19,8 @@ BANNER_DIR = Path(__file__).resolve().parent
 OUTPUT_PNG = BANNER_DIR / "banner.png"
 FONT_CACHE_DIR = Path.home() / ".cache" / "banner-fonts"
 FONT_WEIGHTS = (400, 600, 800)
-FOX_CENTER = (452, 356)
-FOX_SCALE = 0.92
+FOX_CENTER = (448, 348)
+FOX_SCALE = 0.84
 
 TERMINAL_SESSION = [
     ("command", "mineru setup"),
@@ -84,6 +84,11 @@ svg text{{font-family:JBM,monospace;white-space:pre}}
 .nose{{fill:var(--cream)}}
 .tip{{fill:var(--cream)}}
 .pupil{{fill:var(--cream)}}
+.iris{{fill:none;stroke:var(--cream);stroke-width:1.2;stroke-dasharray:2 3}}
+.whisker{{fill:var(--dim);font-size:9px}}
+.field{{fill:var(--fox-deep);opacity:0.55}}
+.field-faint{{fill:var(--fox-deep);opacity:0.28}}
+.tail-trail{{fill:var(--fox);font-size:9px;opacity:0.85}}
 .side{{position:absolute;left:800px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:34px}}
 h1{{font-size:40px;font-weight:800;letter-spacing:-1px}}
 .tagline{{font-size:17px;color:var(--dim);margin-top:10px;line-height:1.5}}
