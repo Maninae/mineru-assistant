@@ -27,9 +27,10 @@ FONT_PX = 17   # glyph size at 2x, so ~8.5 CSS px: two rows fit inside a marker 
 ROW_PITCH = 18
 ROW_STAGGER_CHARS = 5
 # (blur radius, opacity): a shield-volcano profile, bright and tight at the stroke, then a long low tail.
-GLOW_LAYERS = [(4, 0.30), (12, 0.20), (30, 0.14), (64, 0.09)]
-EDGE_FEATHER = 4  # blur on the mask before it gates the text, so letters at the stroke edge fade instead of cut
-CROP_MARGIN = 150  # device px kept around the strokes so the halo tail is not clipped
+GLOW_LAYERS = [(4, 0.30), (12, 0.20), (30, 0.15), (64, 0.11), (120, 0.08)]
+EDGE_GROW = 6      # device px the text may extend past the audited stroke edge
+EDGE_FEATHER = 10  # blur on the grown mask before it gates the text, so the outermost letters fade over a long ramp
+CROP_MARGIN = 260  # device px kept around the strokes so the halo tail is not clipped
 COLOR_LIFT = 1.08  # the source is JPEG-soft; a small lift keeps the text as bright as the marker
 
 COMMANDS = ["mineru setup", "mineru profile install --apply", "mineru memory warm-resume",
@@ -74,7 +75,8 @@ def build_emblem() -> Image.Image:
     coverage = render_text_coverage()
     mask_image = Image.open(MASK).convert("L").resize((CANVAS, CANVAS), Image.LANCZOS)
     mask = np.asarray(mask_image).astype(np.float32) / 255.0
-    feathered = np.asarray(mask_image.filter(ImageFilter.GaussianBlur(EDGE_FEATHER))).astype(np.float32) / 255.0
+    grown = mask_image.filter(ImageFilter.MaxFilter(2 * EDGE_GROW + 1))
+    feathered = np.asarray(grown.filter(ImageFilter.GaussianBlur(EDGE_FEATHER))).astype(np.float32) / 255.0
     alpha = coverage * feathered
     rgb = source_colors()
     crisp = np.dstack([rgb, alpha[..., None]])
