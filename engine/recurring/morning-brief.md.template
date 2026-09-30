@@ -159,9 +159,9 @@ After delivering the brief, read `creations/README.md` and see what you think. N
 
 ## Preferences
 
-- **Calendar:** Always use your personal calendar (`{{PERSONAL_CALENDAR_ID}}`)
-- **Never** use {{USER_NAME}}'s primary/personal gmail calendar
-- **Location:** {{USER_LOCATION}}, CA
+- **Calendar:** Always use {{USER_NAME}}'s personal calendar (`{{PERSONAL_CALENDAR_ID}}`)
+- **Never** use the `primary` (Gmail account) calendar
+- **Location:** {{USER_LOCATION}}
 - **Timezone:** America/Los_Angeles (PST/PDT)
 
 ---

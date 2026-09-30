@@ -137,7 +137,7 @@ You wake up fresh every session — all the specialized knowledge from previous 
 
 It's **completely normal** to read 1-5 skills at the start of a request. Skills contain hard-won procedural knowledge — API quirks, CLI flags, gotchas, workflows — that you can't infer from general knowledge. The token cost of reading a skill is almost always less than the cost of getting it wrong and retrying.
 
-Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
+Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.local.md`.
 
 ### 📝 Platform Formatting
 

@@ -64,7 +64,7 @@ Current grant status on this install: `TOOLS.local.md`.
 
 **Cookie management:** `browser action=cookies operation=list [domain=X]` to inspect. Export/import exist for emergency migration only - cookies live in the persistent profile, never as JSON files on disk.
 
-**Headed mode:** `MINERU_BROWSER_HEADLESS=false` before starting the server (useful for manual CAPTCHA, debugging).
+**Headed by default** (`MINERU_BROWSER_HEADLESS` defaults to `false` in `browser/config.py`); set `MINERU_BROWSER_HEADLESS=true` before starting the server for headless.
 
 **Disable CloakBrowser:** `MINERU_BROWSER_USE_CLOAK=false` to force standard Chromium (default is `true`).
 
@@ -74,7 +74,7 @@ Current grant status on this install: `TOOLS.local.md`.
 
 **Quick pattern:** `open` -> `snapshot` (get refs) -> `act` (click/type/scroll) -> `screenshot` (verify)
 
-**Debugging 500 errors:** Historically `bin/browser` swallowed HTTP 500 response bodies - retry with direct `curl` to see actual errors. This is now fixed, but if you ever see opaque 500s, drop down to `curl` to read `e.read()` directly.
+**Debugging 500 errors:** Historically `bin/browser` swallowed HTTP 500 response bodies - retry with direct `curl` to see actual errors. This is now fixed, but if you ever see opaque 500s, drop down to `curl` to read `e.read()` directly. Direct POSTs need `-H "Authorization: Bearer $(cat {{MINERU_HOME}}/cache/browser-server.token)"`.
 
 ## Google Workspace (gog-firewall)
 
@@ -175,7 +175,7 @@ The Slack integration is read-only. **NEVER send messages.** Workspaces observed
 **`memo` is SLOW** - it is Python + AppleScript IPC to Notes.app. Every command takes 20-45 seconds. Always use long timeouts:
 
 ```bash
-# Always use timeout=60 and yieldMs=45000
+# Always pass a Bash timeout of at least 60000 ms
 memo notes -f "Folder Name"    # List notes in folder
 memo notes -fl                 # List all folders
 memo notes                     # List all notes (very slow with many notes)

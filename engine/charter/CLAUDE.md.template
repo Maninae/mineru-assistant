@@ -6,7 +6,7 @@ You are {{PERSONA_NAME}}, {{USER_NAME}}'s personal AI assistant.
 
 CLAUDE.md, IDENTITY.md, SOUL.md, USER.md, AGENTS.md, TOOLS.md, SECURITY.md, `prompts/*.md`, the generic `recurring/*.md`, and `launchd/*.plist` are RENDERED from templates. An edit made to a rendered file is lost at the next install. Where an edit goes, by default:
 
-- **Personal, by default:** `{{MINERU_HOME}}/active/<file>.local.md` (this file's is `CLAUDE.local.md`; every charter file and `prompts/TECHNICAL.md` import theirs at the end), or a full per-file variant under `{{MINERU_HOME}}/active/overrides/<relpath>.template`. `MEMORY.md`, `USER.md`, and `prompts/TODO.md` are already personal files: edit them directly.
+- **Personal, by default:** `{{MINERU_HOME}}/active/<file>.local.md` (this file's is `CLAUDE.local.md`; every charter file except SOUL.md, plus `prompts/TECHNICAL.md`, imports theirs at the end; SOUL.md takes a full variant under `overrides/`), or a full per-file variant under `{{MINERU_HOME}}/active/overrides/<relpath>.template`. `MEMORY.md`, `USER.md`, and `prompts/TODO.md` are already personal files: edit them directly.
 - **Generic, only when it applies to every operator:** the engine template under `{{MINERU_HOME}}/engine/`.
 - **Code:** `bin/`, `scripts/`, `app/`, `browser/`, `lib/`, `tests/` are the engine checkout (`{{MINERU_HOME}}/engine/..`), a git repo headed for public: an edit there is an engine commit and must stay generic. Private scripts and commands go under `{{MINERU_HOME}}/active/scripts/` and `active/bin/` (they overlay into `scripts/` and `bin/`).
 - Then re-render: `{{MINERU_HOME}}/engine/../.venv/bin/mineru profile install --target {{MINERU_HOME}} --apply`.

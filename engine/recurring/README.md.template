@@ -28,7 +28,7 @@ This directory holds the instruction markdown files for every scheduled {{PERSON
 
 *Rows tagged `(plain bash/Python)` are listed for schedule audits only — launchd invokes their script directly, never `claude-fda -p`. Don't wire an LLM session at them.*
 
-See `prompts/TECHNICAL.md` for the canonical schedule with model assignments.
+See `prompts/TECHNICAL.local.md` for the canonical schedule with model assignments.
 
 ## Paused Jobs (do not execute unless explicitly asked)
 

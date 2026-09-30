@@ -38,7 +38,7 @@ State file: `{{MINERU_HOME}}/briefs_model_watch/seen-models.json`, shape `{"upda
 Path: `{{MINERU_HOME}}/briefs_model_watch/model-watch-$TODAY.md`. No markdown tables ({{USER_NAME}} reads on Telegram); bullets only.
 
 **Outcome A (no new models, no recommendations, sources fine):** the file is exactly one line, e.g.
-`2026-09-26 — No new Anthropic models since 2026-09-19; lineup unchanged (9 models, newest Fable 5.1 / Opus 5 / Sonnet 5). 13 job configs + daemon current. No upgrades recommended.`
+`2026-09-26 — No new Anthropic models since 2026-09-19; lineup unchanged (newest Fable 5.1 / Opus 5.5 / Sonnet 5). 13 job configs + daemon current. No upgrades recommended.`
 Do NOT deliver.
 
 **Outcome B (anything new, any recommendation, a retired model in use, or sources unreachable):** write the full brief, then deliver exactly once:

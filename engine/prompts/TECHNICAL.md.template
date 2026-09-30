@@ -105,7 +105,7 @@ Google auth is layered and each layer fails independently:
 
 ## Session Reset
 
-Automatic daily reset is **disabled**. {{USER_NAME}} manually runs `/new` when ready to reset. The heartbeat monitors context usage and alerts at 200K, then every 100K after that (300K, 400K, ... 900K), with urgent alerts at 950K+. The 1 AM consolidation job reads CC JSONL files directly for session persistence.
+Automatic daily reset is **disabled**. {{USER_NAME}} manually runs `/new` when ready to reset. The daemon warns once each as context crosses 30%, 50%, and 70% of the 1M window (Landline `CONTEXT_WARN_THRESHOLDS`). The 1 AM consolidation job reads CC JSONL files directly for session persistence.
 
 ---
 
@@ -165,7 +165,7 @@ High-level layout (run `ls {{MINERU_HOME}}/` for the full snapshot):
 - `recurring/` - Instruction markdown for each cron job. Paused jobs keep their instruction files here; only their **outputs** are archived under `archive/paused-jobs/` (see `recurring/README.md`).
 - `memory/` - `daily/` session logs + structured subfolders (a per-user namespace folder plus people, projects, places, faith, social, travel, lifestyle, recipes, events, monthly, archive/).
 - `briefs_*/` - One output dir per recurring job.
-- Telegram daemon - lives in its own repo (see `TOOLS.md` -> Telegram); the workspace keeps only `landline.json`, the `scripts/launchd/` plists, and `bin/restart-daemon.sh`.
+- Telegram daemon - lives in its own repo (see `TOOLS.md` -> Telegram); the workspace keeps only `landline.json`, the `launchd/` plists (rendered from `engine/launchd/`), and `bin/restart-daemon.sh`.
 - `browser/` - Playwright browser automation server (port 9471).
 - `scripts/` - Trigger scripts, delivery helper, firewall, memory tooling.
 - `bin/` - CLI tools symlinked to `{{USER_HOME}}/.local/bin` (msearch, gog-firewall, imsg-firewall, browser, and friends); also `restart-daemon.sh` and `imsg-named` (present but FORBIDDEN for reads - use `imsg-firewall`).
@@ -173,7 +173,8 @@ High-level layout (run `ls {{MINERU_HOME}}/` for the full snapshot):
 - `logs/` - Per-job rotating logs.
 - `reports/` - Ad-hoc research artifacts.
 - `cache/`, `inbox/`, `outbox/`, `creations/` - runtime state and scratch space.
-- `app/` - {{PERSONA_NAME}} web-app source and launchd plist (if the web app is installed).
+- `app/` - {{PERSONA_NAME}} web-app source (its plist is in `launchd/`; if the web app is installed).
+- `engine/`, `profiles/<name>/` (the `active` symlink), `launchd/`, `config/`: see CLAUDE.md "Editing this file".
 
 ---
 

@@ -1,6 +1,6 @@
 # Weekly Transaction Review
 
-_(File/plist/dir keep the `daily-transactions` name for stability; the job is weekly — see the schedule table in `prompts/TECHNICAL.md`.)_
+_(File/plist/dir keep the `daily-transactions` name for stability; the job is weekly — see the schedule table in `prompts/TECHNICAL.local.md`.)_
 
 **When:** Thursday at 10 PM (local time, {{USER_TIMEZONE}})
 **Purpose:** Weekly recap of the most-recently-completed Mon–Sun week. Running Thursday (4 days after that Sunday closes) gives every charge in the week ≥4 days to post, so nothing slips through the credit-card settlement lag.

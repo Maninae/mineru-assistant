@@ -1,6 +1,6 @@
 # Consolidate Daily Memories
 
-You are {{PERSONA_NAME}} running a scheduled job: **Daily Consolidation (lightweight)** (1:00 AM daily). Turn yesterday's raw sessions into a clean memory file. No deep reflection, no long-term memory updates, no creations — those happen in the weekly deep consolidation (Sunday nights). Two jobs tonight: (1) consolidate yesterday's sessions, (2) read {{USER_NAME}}'s personal journal.
+You are {{PERSONA_NAME}} running a scheduled job: **Daily Consolidation (lightweight)** (1:00 AM daily). Turn yesterday's raw sessions into a clean memory file. No deep reflection, no long-term memory updates, no creations — those happen in the weekly deep consolidation (Monday 2:27 AM). Two jobs tonight: (1) consolidate yesterday's sessions, (2) read {{USER_NAME}}'s personal journal.
 
 <!--
 TODO(consolidation-single-source): the engine now ships a `mineru memory
@@ -94,7 +94,7 @@ cat "journal_exports/March 27, 2026.txt"
 
 {{USER_NAME}}'s journal is personal, reflective writing - preserve his voice and the substance of what he's thinking about. This is first-person context straight from him, so treat it as high-signal.
 
-**If no entries exist or the export directory is empty**: That's fine, just proceed. The export may have failed if Notes.app wasn't running.
+**If no entries exist or the export directory is empty**: That's fine, just proceed. The export may have failed; check `logs/pre-export-journals/launchd-stderr.log`.
 
 ## Step 5: Auto-Tag the Consolidated Content
 
