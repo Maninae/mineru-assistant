@@ -8,8 +8,8 @@ Inputs, both derived from the Telegram avatar `logo_source.jpg`:
   has at that spot (the mint-to-violet gradient comes from the picture, not from a palette).
 
 Method: rows of monospace command text are rasterised across the emblem canvas, each glyph tinted by
-the avatar color under it; the text coverage times the mask is the alpha. Two blurred copies of the
-result sit underneath as the neon glow, matching the soft halo in the source.
+the avatar color under it; the text coverage times the mask is the alpha. Blurred copies of the
+solid stroke sit underneath as the neon glow, tight and bright at the stroke with a long low tail.
 """
 from pathlib import Path
 
@@ -26,8 +26,10 @@ CANVAS = 1280  # device pixels; the avatar is 640, everything is drawn at 2x
 FONT_PX = 17   # glyph size at 2x, so ~8.5 CSS px: two rows fit inside a marker stroke
 ROW_PITCH = 18
 ROW_STAGGER_CHARS = 5
-GLOW_LAYERS = [(5, 0.32), (18, 0.26)]  # (blur radius, opacity), tight glow then wide halo
-CROP_MARGIN = 70  # device px kept around the strokes so the halo is not clipped
+# (blur radius, opacity): a shield-volcano profile, bright and tight at the stroke, then a long low tail.
+GLOW_LAYERS = [(4, 0.30), (12, 0.20), (30, 0.14), (64, 0.09)]
+EDGE_FEATHER = 4  # blur on the mask before it gates the text, so letters at the stroke edge fade instead of cut
+CROP_MARGIN = 150  # device px kept around the strokes so the halo tail is not clipped
 COLOR_LIFT = 1.08  # the source is JPEG-soft; a small lift keeps the text as bright as the marker
 
 COMMANDS = ["mineru setup", "mineru profile install --apply", "mineru memory warm-resume",
@@ -70,8 +72,10 @@ def source_colors() -> np.ndarray:
 def build_emblem() -> Image.Image:
     """The masked, colored text with its glow, as an RGBA image on a transparent ground."""
     coverage = render_text_coverage()
-    mask = np.asarray(Image.open(MASK).convert("L").resize((CANVAS, CANVAS), Image.LANCZOS)).astype(np.float32) / 255.0
-    alpha = coverage * mask
+    mask_image = Image.open(MASK).convert("L").resize((CANVAS, CANVAS), Image.LANCZOS)
+    mask = np.asarray(mask_image).astype(np.float32) / 255.0
+    feathered = np.asarray(mask_image.filter(ImageFilter.GaussianBlur(EDGE_FEATHER))).astype(np.float32) / 255.0
+    alpha = coverage * feathered
     rgb = source_colors()
     crisp = np.dstack([rgb, alpha[..., None]])
     crisp_image = Image.fromarray((crisp * 255).astype(np.uint8), "RGBA")
