@@ -19,8 +19,8 @@ BANNER_DIR = Path(__file__).resolve().parent
 OUTPUT_PNG = BANNER_DIR / "banner.png"
 FONT_CACHE_DIR = Path.home() / ".cache" / "banner-fonts"
 FONT_WEIGHTS = (400, 600, 800)
-FOX_CENTER = (448, 348)
-FOX_SCALE = 0.84
+FOX_CENTER = (432, 334)
+FOX_SCALE = 0.93
 
 TERMINAL_SESSION = [
     ("command", "mineru setup"),
@@ -72,23 +72,27 @@ body{{width:1280px;height:720px;background:var(--bg);color:var(--ink);font-famil
 svg{{position:absolute;left:0;top:0}}
 svg text{{font-family:JBM,monospace;white-space:pre}}
 .outline{{fill:var(--fox);font-size:12.5px;font-weight:600}}
-.fur{{fill:var(--fox);font-size:10.5px;font-weight:600}}
+.fur{{fill:var(--fox-deep);font-size:10.5px;font-weight:600}}
 .detail{{fill:var(--fox-deep);font-size:9.5px}}
-.eye{{fill:var(--cream);font-size:12px;font-weight:800}}
-.eye-lower{{fill:var(--fur);font-size:12px}}
-.blaze{{fill:var(--fur);font-size:9px}}
-.tail{{fill:var(--fox);font-size:11.5px;font-weight:600}}
-.tail-inner{{fill:var(--fox-deep);font-size:11.5px;font-weight:600}}
+.tail{{fill:var(--fox-deep);font-size:11.5px;font-weight:600}}
 .tail-core{{fill:var(--fur);font-size:9px}}
-.tip-text{{fill:var(--cream);font-size:12px;font-weight:800}}
+.head-fill{{fill:var(--fox);opacity:0.07}}
+.ear-fill{{fill:var(--fox);opacity:0.10}}
+.ear-field{{fill:var(--fox-deep);opacity:0.55}}
+.muzzle-fill{{fill:var(--cream);opacity:0.07}}
+.muzzle-field{{fill:var(--cream);opacity:0.22}}
+.blaze{{fill:var(--cream);opacity:0.12}}
+.tail-fill{{fill:var(--fox);opacity:0.09}}
+.tail-field{{fill:var(--fox-deep);opacity:0.3}}
+.tail-tip{{fill:var(--cream);opacity:0.10}}
+.tail-tip-field{{fill:var(--cream);opacity:0.5}}
+.eye-white{{fill:var(--cream);opacity:0.92}}
+.eye-lid{{fill:none;stroke:var(--cream);stroke-width:2.2;stroke-linecap:round}}
+.iris-outer{{fill:var(--fox-deep)}}
+.iris{{fill:var(--fox)}}
+.pupil{{fill:var(--bg)}}
+.highlight{{fill:var(--cream)}}
 .nose{{fill:var(--cream)}}
-.tip{{fill:var(--cream)}}
-.pupil{{fill:var(--cream)}}
-.iris{{fill:none;stroke:var(--cream);stroke-width:1.2;stroke-dasharray:2 3}}
-.whisker{{fill:var(--dim);font-size:9px}}
-.field{{fill:var(--fox-deep);opacity:0.55}}
-.field-faint{{fill:var(--fox-deep);opacity:0.28}}
-.tail-trail{{fill:var(--fox);font-size:9px;opacity:0.85}}
 .side{{position:absolute;left:800px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:34px}}
 h1{{font-size:40px;font-weight:800;letter-spacing:-1px}}
 .tagline{{font-size:17px;color:var(--dim);margin-top:10px;line-height:1.5}}

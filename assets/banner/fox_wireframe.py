@@ -1,74 +1,63 @@
-"""A fox head drawn as a text-on-path wireframe: every stroke is a line of `mineru` CLI text.
+"""A fox drawn as a text-on-path wireframe with body: every stroke is a line of `mineru` CLI text.
 
-Front-facing, symmetric, angular in the spirit of a motorsport-style fox emblem, but with upright
-ears and a lifted, calm eye. Geometry is authored once for the RIGHT half in a local frame with the
-face axis on x=0 and y pointing down; the left half is a mirrored copy.
-
+Front-facing head with the tail curling in from behind. Geometry is authored once for the RIGHT half
+in a local frame with the face axis on x=0 and y pointing down; the left half is a mirrored copy.
 Each path is `[start, [(control1, control2, end), ...]]`, a chain of cubic Beziers.
+
+Reading order the design is built for: the amber eyes first, then the head silhouette in full
+orange, then the tail and cheek fur in deeper orange, then the fine detail text.
 
 - Text must read upright on both sides, so every run is re-oriented left-to-right (top-to-bottom
   only when it is truly vertical) after mirroring.
 - JetBrains Mono is monospace, so how many characters fit on a stroke is its arc length divided by
   the glyph advance; runs are packed with whole words so no corner collides mid-word.
-- The head outline is one polyline (chin, cheek, ear, brow); each straight segment is its own run
-  so the corners stay crisp and every word reads upright.
+- Fills (head, ears, tail, muzzle, blaze) are polygons sampled from the same Bezier chains, drawn
+  under the text. Dot fields sit on the text grid (no jitter) so they belong to the type.
 """
 import html
 
-# Right-half head outline, chin to ear tip. A fox head is a triangle: narrow pointed snout, wide cheeks, tall ears.
+# Right-half head outline, chin to ear tip. Mass sits low: narrow snout, cheek ruff widest below the
+# eyes, a notch between ruff and ear, ears on top of a domed forehead.
 HEAD_OUTLINE = [(0, 236), [
-    ((26, 228), (76, 206), (118, 168)),       # sharp chin up the narrow muzzle
-    ((176, 124), (230, 60), (228, -30)),      # the cheek bulging out under the ear
-    ((236, -130), (222, -210), (168, -272)),  # outer ear, tall, curling in at the tip
-    ((138, -222), (104, -164), (72, -122)),   # inner ear back down to the brow
+    ((18, 232), (48, 216), (72, 186)),        # snout
+    ((112, 144), (196, 92), (232, 22)),       # cheek taper, widest at y=22
+    ((238, -34), (214, -66), (198, -78)),     # the notch between cheek ruff and ear base
+    ((220, -150), (212, -232), (182, -270)),  # outer ear, leaning slightly outward
+    ((146, -230), (108, -170), (80, -130)),   # inner ear down to the brow
 ]]
-# The brow spans both halves as one run, so the word at the centre of the forehead is unbroken.
-BROW = [(-72, -122), [((-28, -100), (28, -100), (72, -122))]]
-# A second stroke just inside the ear, the inner ear.
-INNER_EAR = [(164, -244), [((158, -196), (136, -156), (100, -128))]]
-# The face mask: from the ear base, around the outside of the eye, down toward the muzzle.
-MASK = [(86, -100), [((142, -66), (160, 10), (126, 66)), ((110, 94), (90, 116), (64, 134))]]
-# The eye: a large almond slanted up and outward, a dotted iris ring and a filled pupil.
-EYE_UPPER = [(36, -24), [((64, -62), (120, -68), (154, -42))]]
-EYE_LOWER = [(40, -12), [((68, 8), (120, 0), (152, -34))]]
-IRIS_CENTER = (95, -32)
-IRIS_RADIUS = 11
-PUPIL_RADIUS = 5
-# Whiskers: two per side, sweeping out from the muzzle across the cheek.
-WHISKERS = [
-    [(44, 140), [((100, 130), (160, 128), (214, 146))]],
-    [(44, 154), [((96, 158), (154, 164), (206, 174))]],
-]
-# Cheek fur: three sweeps flaring out and down from the cheek, like a ruff.
+# The brow spans both halves as one run and domes upward.
+BROW = [(-80, -130), [((-30, -146), (30, -146), (80, -130))]]
+INNER_EAR = [(176, -240), [((170, -196), (146, -160), (110, -136))]]
+EAR_FIELD = [(180, -258), (204, -84), (88, -130)]
+# The mask line: the edge between the dark upper face and the pale muzzle, cheek to under the eye.
+MASK = [(162, 104), [((158, 62), (132, 26), (100, 20)), ((80, 26), (56, 44), (40, 62))]]
+# The eye: a slanted almond, heavier upper lid, iris filling it so sclera shows only at the corners.
+EYE_UPPER = [(44, -16), [((66, -50), (118, -62), (146, -50))]]
+EYE_LOWER = [(44, -16), [((70, 0), (124, -18), (146, -50))]]
+IRIS_CENTER = (92, -34)
+IRIS_OUTER_RADIUS = 21
+IRIS_INNER_RADIUS = 15
+PUPIL_SLIT = (7, 11)  # rx, ry of the vertical pupil
+HIGHLIGHT = ((84, -44), 3.5)  # centre, radius
+# The blaze: a pale wedge down the centre of the face between the eyes.
+BLAZE_POLYGON = [(0, -60), (10, 30), (0, 80), (-10, 30)]
+# Cheek fur: three sweeps off the ruff.
 CHEEK_FUR = [
-    [(200, 96), [((236, 100), (262, 116), (284, 146))]],
-    [(186, 128), [((222, 140), (244, 166), (254, 200))]],
-    [(160, 160), [((190, 178), (206, 204), (210, 238))]],
+    [(206, 58), [((232, 66), (248, 82), (258, 104))]],
+    [(174, 100), [((204, 110), (222, 134), (228, 166))]],
+    [(132, 142), [((158, 156), (174, 178), (176, 206))]],
 ]
-# Dotted fur fields: polygons (local coords) filled with a jittered hex grid of faint dots.
-EAR_FIELD = [(166, -256), (218, -70), (102, -122)]
-CHEEK_FIELD = [(96, -92), (146, -56), (160, 10), (126, 66), (70, 130), (118, 166), (176, 122), (224, 58), (226, -30), (200, -66)]
-# The blaze: a faint dotted line down the centre of the forehead.
-BLAZE = [(0, -90), [((0, -60), (0, -30), (0, 0))]]
-# The nose: a small filled diamond at the tip of the muzzle (local coords, drawn as a polygon).
-NOSE_POLYGON = [(0, 176), (9, 185), (0, 196), (-9, 185)]
-# The tail: emerges below the chin, sweeps left, curls up beside the head and hooks inward at the tip.
-# Widest at the lower-left bend, tapering toward both the root and the tip; two dotted cores fill the body.
-# The root tucks behind the right cheek fur; the last leg of each edge is a dotted trail so the cream tip stands alone.
-TAIL_OUTER = [(176, 272), [((-40, 380), (-420, 330), (-412, 90)), ((-410, -30), (-400, -100), (-380, -150))]]
-TAIL_OUTER_TRAIL = [(-380, -150), [((-350, -216), (-290, -252), (-216, -262)), ((-196, -266), (-182, -256), (-186, -238))]]
-TAIL_INNER = [(130, 250), [((-40, 330), (-330, 296), (-334, 90)), ((-336, -20), (-330, -80), (-318, -126))]]
-TAIL_INNER_TRAIL = [(-318, -126), [((-300, -180), (-270, -212), (-232, -224))]]
-TAIL_CORES = [
-    [(160, 264), [((-40, 364), (-392, 318), (-386, 90)), ((-382, -96), (-326, -218), (-240, -236))]],
-    [(146, 256), [((-40, 348), (-360, 306), (-360, 90)), ((-360, -84), (-312, -200), (-236, -232))]],
-]
-# The white tip of the tail: two dense cream strokes beyond where the edge words stop.
-TAIL_TIPS = [
-    [(-286, -212), [((-262, -240), (-236, -258), (-206, -272))]],
-    [(-304, -196), [((-282, -232), (-254, -260), (-220, -288))]],
-]
-EAR_TIP_POINTS = [(168, -272), (-168, -272)]
+# The nose: a filled diamond at the tip of the snout.
+NOSE_POLYGON = [(0, 174), (11, 185), (0, 198), (-11, 185)]
+# The tail: roots INSIDE the head at the right cheek (everything inside the head silhouette is clipped
+# away, so it emerges from behind the cheek), curls under the chin and up beside the left cheek. One text edge (outer); the inner edge is dotted; cream wedge at the tip.
+# The root legs run from inside the head to under the chin and carry dots only, so no word is cut by the head edge.
+TAIL_ROOT_OUTER = [(100, 120), [((170, 250), (60, 330), (-40, 334))]]
+TAIL_OUTER = [(-40, 334), [((-200, 340), (-340, 300), (-336, 100)), ((-334, 0), (-326, -50), (-300, -96))]]
+TAIL_OUTER_TRAIL = [(-300, -96), [((-280, -140), (-250, -162), (-216, -170))]]
+TAIL_ROOT_INNER = [(70, 110), [((130, 220), (40, 290), (-40, 292))]]
+TAIL_INNER = [(-40, 292), [((-170, 296), (-270, 270), (-272, 100)), ((-274, 10), (-266, -30), (-248, -70))]]
+TAIL_INNER_TRAIL = [(-248, -70), [((-240, -110), (-230, -150), (-216, -170))]]
 
 OUTLINE_WORDS = ("mineru setup mineru profile install --apply mineru memory warm-resume "
                  "mineru secrets set mineru cron status mineru memory consolidate").split()
@@ -81,11 +70,8 @@ FONT_PX_BY_ROLE = {
     "outline": 12.5,
     "fur": 10.5,
     "detail": 9.5,
-    "eye": 13,
-    "whisker": 9,
     "tail": 11.5,
     "tail_core": 9,
-    "blaze": 9,
 }
 MONO_ADVANCE_EM = 0.6  # JetBrains Mono glyph width as a fraction of font size
 JOINT_GAP_CHARS = 2
@@ -93,8 +79,7 @@ ARC_SAMPLES_PER_SEGMENT = 200
 VERTICAL_RUN_SLOPE = 0.15  # |dx| under this fraction of |dy| counts as vertical
 OUTLINE_WORD_STEP = 3
 DETAIL_WORD_STEP = 4
-FIELD_DOT_SPACING = 9.0
-FIELD_DOT_JITTER = 2.2
+FIELD_DOT_SPACING = 7.5  # the JetBrains Mono advance at 12.5px, so dot fields sit on the text grid
 FIELD_DOT_RADIUS = 1.1
 
 
@@ -107,24 +92,65 @@ def point_in_polygon(x: float, y: float, polygon: list) -> bool:
     return inside
 
 
-def hex_grid_dots_in_polygon(polygon: list, seed: int) -> list:
-    """Jittered hex-grid points (local coords) inside the polygon; deterministic per seed."""
-    import random
-    rng = random.Random(seed)
+def hex_grid_dots_in_polygon(polygon: list, spacing: float = FIELD_DOT_SPACING) -> list:
+    """Hex-grid points (local coords) inside the polygon, on a fixed grid so fields align with the type."""
     xs = [x for x, _ in polygon]
     ys = [y for _, y in polygon]
     dots, row = [], 0
     y = min(ys)
     while y <= max(ys):
-        x = min(xs) + (FIELD_DOT_SPACING / 2 if row % 2 else 0)
+        x = min(xs) + (spacing / 2 if row % 2 else 0)
         while x <= max(xs):
-            jx, jy = x + rng.uniform(-FIELD_DOT_JITTER, FIELD_DOT_JITTER), y + rng.uniform(-FIELD_DOT_JITTER, FIELD_DOT_JITTER)
-            if point_in_polygon(jx, jy, polygon):
-                dots.append((jx, jy))
-            x += FIELD_DOT_SPACING
-        y += FIELD_DOT_SPACING * 0.866
+            if point_in_polygon(x, y, polygon):
+                dots.append((x, y))
+            x += spacing
+        y += spacing * 0.866
         row += 1
     return dots
+
+
+def sample_chain(path: list, mirrored: bool = False, samples_per_segment: int = 40) -> list:
+    """Dense polyline (local coords) along a Bezier chain, optionally mirrored across x=0."""
+    start, segments = path
+    points, current = [start], start
+    for (x1, y1), (x2, y2), (x3, y3) in segments:
+        x0, y0 = current
+        for i in range(1, samples_per_segment + 1):
+            t = i / samples_per_segment
+            u = 1 - t
+            points.append((u**3 * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t**3 * x3,
+                           u**3 * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t**3 * y3))
+        current = (x3, y3)
+    return [(-x, y) for x, y in points] if mirrored else points
+
+
+def head_silhouette() -> list:
+    """Closed polygon of the whole head: right outline up, brow across, left outline down."""
+    return sample_chain(HEAD_OUTLINE) + sample_chain(BROW)[::-1] + sample_chain(HEAD_OUTLINE, mirrored=True)[::-1]
+
+
+def tail_silhouette() -> list:
+    """Closed polygon of the tail: outer edge root to tip, then inner edge tip to root."""
+    outer = sample_chain(TAIL_ROOT_OUTER) + sample_chain(TAIL_OUTER)[1:] + sample_chain(TAIL_OUTER_TRAIL)[1:]
+    inner = sample_chain(TAIL_ROOT_INNER) + sample_chain(TAIL_INNER)[1:] + sample_chain(TAIL_INNER_TRAIL)[1:]
+    return outer + inner[::-1]
+
+
+def tail_tip() -> list:
+    """Closed polygon of the last stretch of the tail, the white tip."""
+    return sample_chain(TAIL_OUTER_TRAIL) + sample_chain(TAIL_INNER_TRAIL)[::-1]
+
+
+def muzzle_field(mirrored: bool) -> list:
+    """Closed polygon of one pale cheek-and-muzzle half: under the mask line down to the chin."""
+    sign = -1 if mirrored else 1
+    mask_edge = sample_chain(MASK, mirrored)[::-1]  # from under the eye out to the cheek
+    return [(0, 44), (sign * 36, 54)] + mask_edge + [(sign * 72, 186), (0, 236)]
+
+
+def eye_almond(mirrored: bool) -> list:
+    """Closed polygon of one eye: upper lid then lower lid reversed."""
+    return sample_chain(EYE_UPPER, mirrored) + sample_chain(EYE_LOWER, mirrored)[::-1]
 
 
 def oriented_run(path: list, first_segment: int, last_segment: int, mirrored: bool = False) -> list:
@@ -164,7 +190,7 @@ def arc_length(path: list, scale: float) -> float:
 
 
 def pack_words_onto_curve(words: list, length_px: float, font_px: float, trail_dots: bool) -> str:
-    """Whole words, cycled, until the stroke is full; optionally trail off in dots to reach its end."""
+    """Whole words, cycled, until the stroke is full; never ends on a bare `mineru`; optional dot trail."""
     capacity = int(length_px / (MONO_ADVANCE_EM * font_px)) - JOINT_GAP_CHARS
     packed, index = "", 0
     while True:
@@ -172,6 +198,11 @@ def pack_words_onto_curve(words: list, length_px: float, font_px: float, trail_d
         if len(candidate) > capacity:
             break
         packed, index = candidate, index + 1
+    if packed.split() and packed.split()[-1] == "mineru" and len(packed.split()) > 1:
+        packed = packed.rsplit(" ", 1)[0]
+    if packed == "mineru":  # a stroke too short for a verb shows the longest verb that fits instead
+        fitting = [word for word in words if word != "mineru" and len(word) <= capacity]
+        packed = fitting[0] if fitting else packed  # first fitting word of the rotated list, so the two sides differ
     if trail_dots:
         while len(packed) + 2 <= capacity:
             packed += " ·"
@@ -185,21 +216,50 @@ def repeat_pattern_onto_curve(pattern: str, length_px: float, font_px: float) ->
 
 
 def fox_svg(center_x: float, center_y: float, scale: float) -> str:
-    """The whole fox head as SVG `<defs>` paths plus `<textPath>` text, placed and scaled on the page."""
-    path_defs, text_elements = [], []
+    """The whole fox as SVG `<defs>` paths, fills, dot fields and `<textPath>` text, placed and scaled on the page."""
+    path_defs, elements = [], []
+
+    def to_page(point: tuple) -> tuple:
+        return center_x + point[0] * scale, center_y + point[1] * scale
 
     def place(path: list) -> str:
-        to_page = lambda p: f"{center_x + p[0] * scale:.1f},{center_y + p[1] * scale:.1f}"  # noqa: E731
+        fmt = lambda p: "{:.1f},{:.1f}".format(*to_page(p))  # noqa: E731
         start, segments = path
-        return f"M{to_page(start)} " + " ".join("C" + " ".join(to_page(p) for p in segment) for segment in segments)
+        return f"M{fmt(start)} " + " ".join("C" + " ".join(fmt(p) for p in segment) for segment in segments)
 
     def add_text_on_path(path: list, text: str, css_class: str) -> None:
         path_id = f"p{len(path_defs)}"
         path_defs.append(f'<path id="{path_id}" d="{place(path)}"/>')
-        text_elements.append(f'<text class="{css_class}"><textPath href="#{path_id}">{html.escape(text)}</textPath></text>')
+        elements.append(f'<text class="{css_class}"><textPath href="#{path_id}">{html.escape(text)}</textPath></text>')
+
+    def polygon(points: list, css_class: str) -> str:
+        return f'<polygon class="{css_class}" points="' + " ".join("{:.1f},{:.1f}".format(*to_page(p)) for p in points) + '"/>'
+
+    def dot_field(points: list, css_class: str) -> None:
+        for dot in points:
+            px, py = to_page(dot)
+            elements.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="{FIELD_DOT_RADIUS * scale:.1f}" class="{css_class}"/>')
+
+    # The tail is clipped to the region outside the head silhouette, so it emerges from behind the cheek.
+    page_w, page_h = center_x + 2000, center_y + 2000
+    path_defs.append(f'<clipPath id="outside-head" clip-rule="evenodd"><path clip-rule="evenodd" d="M-2000,-2000 H{page_w:.0f} V{page_h:.0f} H-2000 Z '
+                     + "M" + " L".join("{:.1f},{:.1f}".format(*to_page(p)) for p in head_silhouette()) + ' Z"/></clipPath>')
+    elements.append('<g clip-path="url(#outside-head)">')
+    elements.append(polygon(tail_silhouette(), "tail-fill"))
+    dot_field(hex_grid_dots_in_polygon(tail_silhouette()), "tail-field")
+    elements.append(polygon(tail_tip(), "tail-tip"))
+    dot_field(hex_grid_dots_in_polygon(tail_tip()), "tail-tip-field")
+    elements.append('</g>')
+    elements.append(polygon(head_silhouette(), "head-fill"))
+    for mirrored in (False, True):
+        sign = -1 if mirrored else 1
+        elements.append(polygon([(sign * x, y) for x, y in EAR_FIELD], "ear-fill"))
+        dot_field(hex_grid_dots_in_polygon([(sign * x, y) for x, y in EAR_FIELD]), "ear-field")
+        elements.append(polygon(muzzle_field(mirrored), "muzzle-fill"))
+        dot_field(hex_grid_dots_in_polygon(muzzle_field(mirrored)), "muzzle-field")
+    elements.append(polygon(BLAZE_POLYGON, "blaze"))
 
     detail_offset = 0
-    to_page = lambda p: (center_x + p[0] * scale, center_y + p[1] * scale)  # noqa: E731
     for mirrored in (False, True):
         sign = -1 if mirrored else 1
         for run_index, run in enumerate(each_segment_as_run(HEAD_OUTLINE, mirrored)):
@@ -213,43 +273,33 @@ def fox_svg(center_x: float, center_y: float, scale: float) -> str:
             for run in each_segment_as_run(fur, mirrored):
                 add_text_on_path(run, pack_words_onto_curve(words, arc_length(run, scale), FONT_PX_BY_ROLE["fur"], True), "fur")
         for detail in (INNER_EAR, MASK):
-            rotation = detail_offset % len(DETAIL_WORDS)
-            detail_offset += DETAIL_WORD_STEP
-            words = (" · ".join(DETAIL_WORDS[rotation:] + DETAIL_WORDS[:rotation]) + " ·").split()
             for run in each_segment_as_run(detail, mirrored):
+                rotation = detail_offset % len(DETAIL_WORDS)
+                detail_offset += DETAIL_WORD_STEP
+                words = (" · ".join(DETAIL_WORDS[rotation:] + DETAIL_WORDS[:rotation]) + " ·").split()
                 add_text_on_path(run, pack_words_onto_curve(words, arc_length(run, scale), FONT_PX_BY_ROLE["detail"], True), "detail")
-        for whisker in WHISKERS:
-            for run in each_segment_as_run(whisker, mirrored):
-                add_text_on_path(run, repeat_pattern_onto_curve("· ", arc_length(run, scale), FONT_PX_BY_ROLE["whisker"]), "whisker")
-        for run in each_segment_as_run(EYE_UPPER, mirrored):
-            add_text_on_path(run, repeat_pattern_onto_curve("•", arc_length(run, scale), FONT_PX_BY_ROLE["eye"]), "eye")
-        for run in each_segment_as_run(EYE_LOWER, mirrored):
-            add_text_on_path(run, repeat_pattern_onto_curve("· ", arc_length(run, scale), FONT_PX_BY_ROLE["eye"]), "eye-lower")
+        # The eye: cream almond, two-value amber iris clipped to it, vertical pupil, one highlight, heavy upper lid.
+        eye_id = f"eye{int(mirrored)}"
+        path_defs.append(f'<clipPath id="{eye_id}">{polygon(eye_almond(mirrored), "")}</clipPath>')
         ix, iy = to_page((sign * IRIS_CENTER[0], IRIS_CENTER[1]))
-        text_elements.append(f'<circle cx="{ix:.1f}" cy="{iy:.1f}" r="{IRIS_RADIUS * scale:.1f}" class="iris"/>')
-        text_elements.append(f'<circle cx="{ix:.1f}" cy="{iy:.1f}" r="{PUPIL_RADIUS * scale:.1f}" class="pupil"/>')
-        for polygon, css_class in ((EAR_FIELD, "field"), (CHEEK_FIELD, "field-faint")):
-            for dot_x, dot_y in hex_grid_dots_in_polygon(polygon, seed=7):
-                px, py = to_page((sign * dot_x, dot_y))
-                text_elements.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="{FIELD_DOT_RADIUS * scale:.1f}" class="{css_class}"/>')
+        hx, hy = to_page((sign * HIGHLIGHT[0][0], HIGHLIGHT[0][1]))
+        elements.append(polygon(eye_almond(mirrored), "eye-white"))
+        elements.append(f'<g clip-path="url(#{eye_id})">'
+                        f'<circle cx="{ix:.1f}" cy="{iy:.1f}" r="{IRIS_OUTER_RADIUS * scale:.1f}" class="iris-outer"/>'
+                        f'<circle cx="{ix:.1f}" cy="{iy:.1f}" r="{IRIS_INNER_RADIUS * scale:.1f}" class="iris"/>'
+                        f'<ellipse cx="{ix:.1f}" cy="{iy:.1f}" rx="{PUPIL_SLIT[0] * scale:.1f}" ry="{PUPIL_SLIT[1] * scale:.1f}" class="pupil"/>'
+                        f'<circle cx="{hx:.1f}" cy="{hy:.1f}" r="{HIGHLIGHT[1] * scale:.1f}" class="highlight"/></g>')
+        elements.append(f'<path class="eye-lid" d="{place([(sign * EYE_UPPER[0][0], EYE_UPPER[0][1]), [tuple((sign * x, y) for x, y in seg) for seg in EYE_UPPER[1]]])}"/>')
     for run in each_segment_as_run(BROW):
         add_text_on_path(run, pack_words_onto_curve(OUTLINE_WORDS, arc_length(run, scale), FONT_PX_BY_ROLE["outline"], False), "outline")
-    for run in each_segment_as_run(BLAZE):
-        add_text_on_path(run, repeat_pattern_onto_curve("· ", arc_length(run, scale), FONT_PX_BY_ROLE["blaze"]), "blaze")
-    for stroke, css_class in ((TAIL_OUTER, "tail"), (TAIL_INNER, "tail-inner")):
-        for run_index, run in enumerate(each_segment_as_run(stroke)):
-            rotation = (run_index * OUTLINE_WORD_STEP) % len(TAIL_WORDS)
-            words = TAIL_WORDS[rotation:] + TAIL_WORDS[:rotation]
-            add_text_on_path(run, pack_words_onto_curve(words, arc_length(run, scale), FONT_PX_BY_ROLE["tail"], True), css_class)
-    for trail in (TAIL_OUTER_TRAIL, TAIL_INNER_TRAIL):
-        for run in each_segment_as_run(trail):
-            add_text_on_path(run, repeat_pattern_onto_curve("•", arc_length(run, scale), FONT_PX_BY_ROLE["tail_core"]), "tail-trail")
-    for core in TAIL_CORES:
-        for run in each_segment_as_run(core):
+    elements.append('<g clip-path="url(#outside-head)">')
+    for run_index, run in enumerate(each_segment_as_run(TAIL_OUTER)):
+        rotation = (run_index * OUTLINE_WORD_STEP) % len(TAIL_WORDS)
+        words = TAIL_WORDS[rotation:] + TAIL_WORDS[:rotation]
+        add_text_on_path(run, pack_words_onto_curve(words, arc_length(run, scale), FONT_PX_BY_ROLE["tail"], True), "tail")
+    for stroke in (TAIL_ROOT_OUTER, TAIL_ROOT_INNER, TAIL_INNER, TAIL_INNER_TRAIL, TAIL_OUTER_TRAIL):
+        for run in each_segment_as_run(stroke):
             add_text_on_path(run, repeat_pattern_onto_curve("· ", arc_length(run, scale), FONT_PX_BY_ROLE["tail_core"]), "tail-core")
-    for tip in TAIL_TIPS:
-        for run in each_segment_as_run(tip):
-            add_text_on_path(run, repeat_pattern_onto_curve("•", arc_length(run, scale), FONT_PX_BY_ROLE["eye"]), "tip-text")
-    nose = '<polygon class="nose" points="' + " ".join(f"{center_x + x * scale:.1f},{center_y + y * scale:.1f}" for x, y in NOSE_POLYGON) + '"/>'
-    ear_tips = "".join(f'<circle cx="{center_x + x * scale:.1f}" cy="{center_y + y * scale:.1f}" r="3.2" class="tip"/>' for x, y in EAR_TIP_POINTS)
-    return f'<defs>{"".join(path_defs)}</defs>{"".join(text_elements)}{nose}{ear_tips}'
+    elements.append('</g>')
+    elements.append(polygon(NOSE_POLYGON, "nose"))
+    return f'<defs>{"".join(path_defs)}</defs>{"".join(elements)}'
