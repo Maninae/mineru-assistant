@@ -1,4 +1,6 @@
-# mineru-assistant
+<p align="center">
+  <img src="assets/banner/banner.png" alt="mineru: a fox head drawn as a wireframe of mineru CLI commands, beside a terminal running mineru setup, memory warm-resume, and cron status" width="820">
+</p>
 
 Clone one engine, hydrate your own private AI assistant.
 
