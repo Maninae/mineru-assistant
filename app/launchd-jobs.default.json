@@ -14,7 +14,6 @@
     {"label_suffix": "daily-consolidation", "display_name": "Daily Consolidation", "freshness": {"kind": "newest_in_dir", "dir": "memory/daily"}},
     {"label_suffix": "memory-description", "display_name": "Memory Description", "freshness": {"kind": "newest_in_dir", "dir": "memory", "exclude": ["memory/daily", "memory/monthly"]}},
     {"label_suffix": "pre-export-journals", "display_name": "Journal Pre-Export", "freshness": {"kind": "newest_in_dir", "dir": "journal_exports"}},
-    {"label_suffix": "keepsake-autodeploy", "display_name": "Keepsake Autodeploy", "freshness": {"kind": "file_mtime", "path": "cache/keepsake-autodeploy-state.json"}},
     {"label_suffix": "daemon-watchdog", "display_name": "Daemon Watchdog", "freshness": {"kind": "neutral"}},
     {"label_suffix": "cleanup-retention", "display_name": "Cleanup Retention", "freshness": {"kind": "neutral"}},
     {"label_suffix": "exercise-suggestion", "display_name": "Daily Exercise Suggestion"},

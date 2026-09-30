@@ -570,7 +570,6 @@ _CRON_JOB_NAMES = (
     "cleanup-retention",
     "group-members-sweep",
     "pre-export-journals",
-    "keepsake-autodeploy",
 )
 
 

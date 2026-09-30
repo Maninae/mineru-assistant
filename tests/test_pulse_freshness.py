@@ -17,18 +17,37 @@ Run: python3 -m pytest tests/test_pulse_freshness.py -q
      python3 tests/test_pulse_freshness.py
 """
 
+import json
 import sys
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _app_test_setup import SyntheticWorkspace, FrozenTime   # noqa: E402
 
+import config   # noqa: E402
+import launchd_jobs   # noqa: E402
 import pulse_freshness   # noqa: E402
+from launchd_jobs import SignalKind   # noqa: E402
 
 
 DAY = 24 * 3600
+
+
+def bundled_default_freshness_spec(label: str) -> dict:
+    """Parsed freshness spec for `label` from the engine's bundled default registry.
+
+    Reads `app/launchd-jobs.default.json` directly, so the result does not depend
+    on whichever operator registry the module-level JOB_SIGNAL_TABLE loaded.
+    """
+    with open(launchd_jobs.BUNDLED_DEFAULT_JOBS_FILE, "r", encoding="utf-8") as registry_file:
+        jobs = json.load(registry_file)["jobs"]
+    for job in jobs:
+        if config.LAUNCHD_LABEL_PREFIX + job["label_suffix"] == label:
+            return launchd_jobs.parse_freshness(label, job["freshness"])
+    raise KeyError(f"{label} not in the bundled default launchd job registry")
 
 
 class ClassifyStatusBoundariesTest(unittest.TestCase):
@@ -189,12 +208,19 @@ class SignalTimestampTest(unittest.TestCase):
         self.assertIsNone(pulse_freshness.signal_timestamp("com.some.unknown"))
 
     def test_file_mtime_returns_stat(self):
-        target = self.ws.root / "cache" / "keepsake-autodeploy-state.json"
+        # Pin house-scan's spec to the engine's bundled default registry: the
+        # module-level table loads from the operator's registry when one exists,
+        # and an operator may map house-scan to a different signal kind.
+        label = "com.mineru.house-scan"
+        bundled_spec = bundled_default_freshness_spec(label)
+        self.assertEqual(bundled_spec["kind"], SignalKind.FILE_MTIME)
+        target = self.ws.root / "logs" / "house-scan" / "house-scan.log"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("{}")
+        target.write_text("log line\n")
         import os
         os.utime(target, (12345.0, 12345.0))
-        ts = pulse_freshness.signal_timestamp("com.mineru.keepsake-autodeploy")
+        with mock.patch.dict(pulse_freshness.JOB_SIGNAL_TABLE, {label: bundled_spec}):
+            ts = pulse_freshness.signal_timestamp(label)
         self.assertEqual(ts, 12345.0)
 
 

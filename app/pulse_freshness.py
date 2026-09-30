@@ -9,8 +9,9 @@ weeks even while the job is running fine). The signal source is one of:
   - A directory with excluded subpaths: same as above, but skip children
     matching a prefix. (memory-description walks memory/ but skips daily/
     and monthly/ which are populated by other jobs.)
-  - A single file: use its mtime. (keepsake-autodeploy writes a state file
-    only when content actually changed.)
+  - A single file: use its mtime. (house-scan appends to
+    logs/house-scan/house-scan.log on every run, so that file's mtime is
+    the last-run signal.)
   - Neutral: job produces no artifact the app can see. Classify as
     "scheduled" so the UI shows a neutral status, not red-failed.
 

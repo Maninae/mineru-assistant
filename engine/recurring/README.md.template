@@ -20,7 +20,6 @@ This directory holds the instruction markdown files for every scheduled {{PERSON
 | Model Watch | Saturday 9:00 AM (weekly) | `model-watch.md` | `briefs_model_watch/` |
 | Contacts & Groups Sweep | 11:00 PM daily | `group-members-sweep.md` (plain bash) | `briefs_imsg_group_members_updates/` |
 | Journal Pre-Export | 12:45 AM daily | `pre-export-journals.md` (plain Python) | `journal_exports/` |
-| Keepsake Autodeploy | 3:00 AM daily | `scripts/keepsake-autodeploy.py` (plain Python, no instruction file) | keepsake repo |
 | Daemon Watchdog | every 5 min | `{{USER_DEV_ROOT}}/claude-landline/deploy/watchdog.sh` (plain bash) | `logs/` |
 | Cleanup Retention | 2nd of month 4:07 AM | `scripts/cleanup-retention.sh` (plain bash, no instruction file) | in-place (logs gzipped, briefs → `archive/briefs/`) |
 | Telegram Daemon | boot / always-on | Landline (`python3 -m landline`, `{{USER_DEV_ROOT}}/claude-landline`) | — |

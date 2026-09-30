@@ -70,7 +70,6 @@ LIVE_SCRIPT_JOB_NAMES: Iterable[str] = (
     "cleanup-retention",
     "group-members-sweep",
     "pre-export-journals",
-    "keepsake-autodeploy",
 )
 LIVE_ALL_JOB_NAMES = tuple(LIVE_LLM_JOB_NAMES) + tuple(LIVE_SCRIPT_JOB_NAMES)
 
@@ -142,17 +141,17 @@ def _write_cron_yaml(profile: Profile, body: str) -> Path:
 
 class TestShippedCronYaml:
     """The seed `profiles/mineru/cron.yaml` must round-trip through the loader
-    with the exact 16-job roster we cutover to."""
+    with the exact 15-job roster we cutover to."""
 
     def test_loads(self, seed_cron: CronConfig) -> None:
         assert isinstance(seed_cron, CronConfig)
         assert seed_cron.source_path.name == "cron.yaml"
 
-    def test_roster_has_exactly_sixteen_jobs(self, seed_cron: CronConfig) -> None:
+    def test_roster_has_exactly_fifteen_jobs(self, seed_cron: CronConfig) -> None:
         # Locks the inventory: if a future edit deletes a job by
         # accident, this fails LOUDLY at the whole-count level before
         # the name checks pin down which one.
-        assert len(seed_cron.jobs) == 16
+        assert len(seed_cron.jobs) == 15
 
     def test_llm_job_names_match(self, seed_cron: CronConfig) -> None:
         llm = [j.name for j in seed_cron.jobs if j.kind == CRON_JOB_KIND_LLM]

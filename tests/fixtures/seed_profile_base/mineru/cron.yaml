@@ -3,7 +3,7 @@
 # ~/Library/LaunchAgents/com.mineru.*.plist (labels prefixed by
 # `profile.launchd_label_prefix`, currently `com.mineru`).
 #
-# Scope: 16 jobs — 12 LLM (Claude Code) + 4 plain-script. The daemon
+# Scope: 15 jobs — 12 LLM (Claude Code) + 3 plain-script. The daemon
 # plists (com.mineru.telegram-daemon, com.mineru.daemon-watchdog) are
 # INTENTIONALLY EXCLUDED per the Phase-4 cutover doc §7 LANDMINES:
 # the daemon lives out-of-tree in ~/Developer/claude-landline and
@@ -280,7 +280,7 @@ jobs:
     env:
       PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 
-  # --- 4 plain-script jobs --------------------------------------------
+  # --- 3 plain-script jobs --------------------------------------------
   # These are NOT rewrite targets (no LLM invocation, no
   # recurring/*.md), but `mineru cron list` should still show them and
   # `mineru cron install` should still materialize their plists.
@@ -328,18 +328,4 @@ jobs:
     # (Homebrew-first) with HOME. Preserved here.
     env:
       PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
-      HOME: /Users/example
-
-  - name: keepsake-autodeploy
-    kind: script
-    # Daily at 03:00 PT. plist StartCalendarInterval: Hour=3, Minute=0.
-    schedule: "0 3 * * *"
-    program_args:
-      - /opt/homebrew/bin/python3
-      - /Users/example/.mineru/scripts/keepsake-autodeploy.py
-    timeout_seconds: 600
-    # DIVERGENCE: like cleanup-retention, .local/bin lands at the END
-    # of PATH in the live plist. Preserved here.
-    env:
-      PATH: /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/example/.local/bin
       HOME: /Users/example

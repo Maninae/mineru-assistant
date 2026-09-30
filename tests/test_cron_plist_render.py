@@ -2,7 +2,7 @@
 
 Two contract layers:
 
-  1. **Golden-file parity.** Every one of the 16 jobs in
+  1. **Golden-file parity.** Every one of the 15 jobs in
      `profiles/mineru/cron.yaml` renders to a byte-for-byte match against
      `tests/fixtures/plists/<name>.plist`. The fixtures are checked in
      so a copy tweak (whitespace shift, XML-element reorder, cron
@@ -74,7 +74,6 @@ _LIVE_JOB_NAMES = (
     "cleanup-retention",
     "group-members-sweep",
     "pre-export-journals",
-    "keepsake-autodeploy",
 )
 
 
@@ -90,7 +89,7 @@ def seed_cron(seed_profile: Profile) -> CronConfig:
     return load_cron_config(seed_profile)
 
 
-# --- 1. Golden-file parity across the 16 jobs -----------------------------
+# --- 1. Golden-file parity across the 15 jobs -----------------------------
 
 
 class TestGoldenFileParity:
