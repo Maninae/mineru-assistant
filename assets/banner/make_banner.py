@@ -1,10 +1,10 @@
-"""Render the README banner: an orange text-wireframe fox head beside a zsh session.
+"""Render the README banner: a neon aurora fox drawn in `mineru` command text, beside a zsh session.
 
     python3 assets/banner/make_banner.py   ->  assets/banner/banner.png  (2560x1440, 16:9)
 
-The fox itself lives in `fox_wireframe.py`. Needs Playwright (with Chromium);
+The fox itself lives in `aurora_fox.py`. Needs Playwright (with Chromium);
 JetBrains Mono is fetched once into ~/.cache and embedded as data URIs.
-Palette matches the mineru.sh site's dark scheme (paper, ink, fox orange).
+Palette: dark slate ground, cool white type, aurora gradient (mint, cyan, violet) on the glyph.
 """
 import base64
 import html
@@ -12,15 +12,15 @@ import re
 import urllib.request
 from pathlib import Path
 
-from fox_wireframe import fox_svg
+from aurora_fox import fox_svg
 from playwright.sync_api import sync_playwright
 
 BANNER_DIR = Path(__file__).resolve().parent
 OUTPUT_PNG = BANNER_DIR / "banner.png"
 FONT_CACHE_DIR = Path.home() / ".cache" / "banner-fonts"
 FONT_WEIGHTS = (400, 600, 800)
-FOX_CENTER = (432, 334)
-FOX_SCALE = 0.93
+FOX_CENTER = (400, 356)
+FOX_SCALE = 1.06
 
 TERMINAL_SESSION = [
     ("command", "mineru setup"),
@@ -66,38 +66,24 @@ def banner_page_html(font_paths: dict) -> str:
     )
     center_x, center_y = FOX_CENTER
     return f"""<!doctype html><html><head><style>{font_faces}
-:root{{--bg:#151311;--ink:#ece4d6;--dim:#a89f90;--fox:#e8842f;--fox-deep:#b8661f;--fur:#6b6358;--cream:#f3e6d2}}
+:root{{--bg:#1b1e29;--ink:#e9ecf4;--dim:#8b91a3;--accent:#6fdcff}}
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{width:1280px;height:720px;background:var(--bg);color:var(--ink);font-family:JBM,monospace;position:relative;overflow:hidden}}
 svg{{position:absolute;left:0;top:0}}
 svg text{{font-family:JBM,monospace;white-space:pre}}
-.outline{{fill:var(--fox);font-size:12.5px;font-weight:600}}
-.fur{{fill:var(--fox-deep);font-size:10.5px;font-weight:600}}
-.detail{{fill:var(--fox-deep);font-size:9.5px}}
-.tail{{fill:var(--fox-deep);font-size:11.5px;font-weight:600}}
-.tail-core{{fill:var(--fur);font-size:9px}}
-.head-fill{{fill:var(--fox);opacity:0.07}}
-.ear-fill{{fill:var(--fox);opacity:0.10}}
-.ear-field{{fill:var(--fox-deep);opacity:0.55}}
-.muzzle-fill{{fill:var(--cream);opacity:0.07}}
-.muzzle-field{{fill:var(--cream);opacity:0.22}}
-.blaze{{fill:var(--cream);opacity:0.12}}
-.tail-fill{{fill:var(--fox);opacity:0.09}}
-.tail-field{{fill:var(--fox-deep);opacity:0.3}}
-.tail-tip{{fill:var(--cream);opacity:0.10}}
-.tail-tip-field{{fill:var(--cream);opacity:0.5}}
-.eye-white{{fill:var(--cream);opacity:0.92}}
-.eye-lid{{fill:none;stroke:var(--cream);stroke-width:2.2;stroke-linecap:round}}
-.iris-outer{{fill:var(--fox-deep)}}
-.iris{{fill:var(--fox)}}
-.pupil{{fill:var(--bg)}}
-.highlight{{fill:var(--cream)}}
-.nose{{fill:var(--cream)}}
+.outline{{fill:url(#aurora);font-size:13px;font-weight:700}}
+.swoosh{{fill:url(#aurora);font-size:12px;font-weight:700}}
+.glow{{opacity:0.95}}
+.halo{{opacity:0.55}}
+.haze{{fill:#4b3d8f;opacity:0.22}}
+.echo-1{{fill:url(#aurora);font-size:9px;opacity:0.55}}
+.echo-2{{fill:url(#aurora);font-size:9px;opacity:0.32}}
+.echo-3{{fill:url(#aurora);font-size:9px;opacity:0.16}}
 .side{{position:absolute;left:800px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:34px}}
 h1{{font-size:40px;font-weight:800;letter-spacing:-1px}}
 .tagline{{font-size:17px;color:var(--dim);margin-top:10px;line-height:1.5}}
 .terminal{{font-size:15px;line-height:1.85}}
-.prompt{{color:var(--fox)}} .output{{color:var(--dim)}}
+.prompt{{color:var(--accent)}} .output{{color:var(--dim)}}
 </style></head><body>
 <svg width="1280" height="720" viewBox="0 0 1280 720">{fox_svg(center_x, center_y, FOX_SCALE)}</svg>
 <div class="side">
