@@ -85,7 +85,7 @@ Current grant status on this install: `TOOLS.local.md`.
 **Full Gmail and Calendar references + gotchas** (search syntax, pagination, thread modify, calendar IDs, MCP tool surface, etc.) live in `prompts/GMAIL.md` and `prompts/GCALENDAR.md` - both auto-loaded into every session via CLAUDE.md. `GCALENDAR.md` covers the **MCP Calendar tools (primary)** plus the `gog-firewall calendar` fallback.
 
 **One-liners to remember:**
-- For **Gmail**, **`gog-firewall` for read AND write** (the Gmail MCP connector is retired here: auth lapses constantly, no write scopes). Details in `prompts/GMAIL.md`.
+- For **Gmail**, **`gog-firewall` for read AND write** (the Gmail MCP connector is retired here: auth lapses constantly, no send tool). Details in `prompts/GMAIL.md`.
 - For **Calendar**, MCP is primary (read **and** write) via `mcp__claude_ai_Google_Calendar__*`; `gog-firewall calendar` is the fallback - used only when an MCP call returns an auth error. See `prompts/GCALENDAR.md`.
 
 Sheets/Drive/Contacts/Docs still go through `gog-firewall` directly - see `gog-firewall --help` for those subcommands.

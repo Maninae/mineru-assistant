@@ -149,6 +149,8 @@ Most recurring jobs run as **isolated CC headless sessions** - separate agent in
 4. It writes output to a file (e.g., `briefs_morning/morning-<date>.md`).
 5. `scripts/deliver-output.py` sends the file contents to **Telegram** via the Bot API.
 
+**Headless runs end when the turn ends.** A recurring job must finish all of its work, subagents included, inside its single headless turn: spawn subagents in the foreground (`run_in_background: false`) or not at all, and never end the turn on "waiting for...". A background subagent still running at turn end is abandoned and the job's output file is never written.
+
 **Important for main session:** These delivered messages arrive in {{USER_NAME}}'s Telegram chat. But **you (the main session instance) did not make those tool calls** - a separate isolated instance did. Do not confuse their output with your own work.
 
 The concrete schedule (which jobs are enabled, when they fire, which model each uses, which instruction file drives them) is per-install and lives in `prompts/TECHNICAL.local.md`.

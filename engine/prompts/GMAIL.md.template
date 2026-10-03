@@ -16,7 +16,7 @@ tags: [gmail, cli, reference, google-workspace]
 | **Read / search** | **`gog-firewall gmail` CLI** | Goes through the prompt-injection firewall, the desired security path for inbound content. |
 | **Write** (mark read, label, send, delete, draft) | **`gog-firewall gmail` CLI** | Full read+write OAuth scopes on a long-lived token. |
 
-**The Gmail MCP connector (`mcp__claude_ai_Gmail__*`) is retired for Gmail work.** Its auth lapses constantly (frequent re-auth, tools silently absent in headless runs) and it lacks write scopes, so nothing load-bearing may depend on it. Expect occasional firewall false-positive redactions on very long emails (marketing, newsletters, recruiter walls); handle per Gotcha 9.
+**The Gmail MCP connector (`mcp__claude_ai_Gmail__*`) is retired for Gmail work.** Its auth lapses constantly (frequent re-auth, tools silently absent in headless runs) and it cannot send mail (it has draft, label, and trash tools, but no send), so nothing load-bearing may depend on it. Expect occasional firewall false-positive redactions on very long emails (marketing, newsletters, recruiter walls); handle per Gotcha 9.
 
 **Never use raw `gog gmail` for reads** — bypasses the firewall. Use `gog-firewall`.
 

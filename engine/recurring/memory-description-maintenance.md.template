@@ -17,7 +17,7 @@ All `.md` files in `memory/` **except**:
 
 ### Step 1: Scan files + load the existing tag vocabulary
 
-List all in-scope `.md` files under `memory/`.
+List all in-scope `.md` files under `memory/`. `memory/` is a symlink into the profile, so traverse it with `find -L memory -name '*.md'` (plain `find memory` returns nothing).
 
 **Before assigning any tags, load the existing tag vocabulary** so new tags stay consistent — reuse existing tags instead of inventing near-synonyms:
 ```bash
