@@ -77,7 +77,7 @@ Anthropic model families you may encounter in this workspace. Which specific IDs
 | Fable 5.x (`claude-fable-5-1`, `claude-fable-5`) | Mythos-class tier - most capable generally-available family, sits above Opus. |
 | Opus 5.x (`claude-opus-5-5`, `claude-opus-5`) | Current Opus line; 1M-context variants available. |
 | Opus 4.x (`claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`) | Prior Opus flagship line; 1M-context variants available. |
-| Sonnet 5 / 4.x (`claude-sonnet-5`, `claude-sonnet-4-6`) | Opus-level performance at Sonnet cost; Sonnet 5 is cheaper than 4.6. |
+| Sonnet 5.5 / 5 / 4.x (`claude-sonnet-5-5`, `claude-sonnet-5`, `claude-sonnet-4-6`) | Opus-level performance at Sonnet cost; Sonnet 5 is cheaper than 4.6. |
 | Haiku 4.x (`claude-haiku-4-5`) | Fast and cheap, good for lightweight tasks. |
 
 **Recurring job model assignments:** most jobs default to a cost-efficient Sonnet tier to save Max quota. A short list of exceptions (jobs that need deeper reasoning) is tracked with the per-install job table in `prompts/TECHNICAL.local.md`.

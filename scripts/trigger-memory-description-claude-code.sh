@@ -7,4 +7,4 @@
 set -euo pipefail
 . "$(dirname "$0")/cc-job-lib.sh"
 
-run_cc_job "memory-description" "claude-sonnet-5" "recurring/memory-description-maintenance.md"
+run_cc_job "memory-description" "claude-sonnet-5-5" "recurring/memory-description-maintenance.md"

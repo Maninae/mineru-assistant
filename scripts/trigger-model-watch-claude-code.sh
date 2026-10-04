@@ -8,5 +8,5 @@
 set -euo pipefail
 . "$(dirname "$0")/cc-job-lib.sh"
 
-run_cc_job "model-watch" "claude-sonnet-5" "recurring/model-watch.md" \
+run_cc_job "model-watch" "claude-sonnet-5-5" "recurring/model-watch.md" \
   "briefs_model_watch/model-watch-*.md"

@@ -51,7 +51,7 @@ PROMPT="$(cat recurring/consolidate-daily-memories.md)
 IMPORTANT: The target date for this consolidation run is $YESTERDAY. Use this date everywhere instead of computing yesterday's date yourself."
 
 rc=0
-"$CC_BIN" --permission-mode bypassPermissions --model claude-sonnet-5 --verbose --print \
+"$CC_BIN" --permission-mode bypassPermissions --model claude-sonnet-5-5 --verbose --print \
   "$PROMPT" || rc=$?
 
 echo "$(date): CC exited with code $rc"

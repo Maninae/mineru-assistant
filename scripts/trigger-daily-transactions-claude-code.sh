@@ -7,5 +7,5 @@
 set -euo pipefail
 . "$(dirname "$0")/cc-job-lib.sh"
 
-run_cc_job "daily-transactions" "claude-sonnet-5" "recurring/daily-transactions.md" \
+run_cc_job "daily-transactions" "claude-sonnet-5-5" "recurring/daily-transactions.md" \
   "briefs_financial/daily-*.md"
