@@ -94,7 +94,7 @@ cat "journal_exports/March 27, 2026.txt"
 
 {{USER_NAME}}'s journal is personal, reflective writing - preserve his voice and the substance of what he's thinking about. This is first-person context straight from him, so treat it as high-signal.
 
-**If no entries exist or the export directory is empty**: That's fine, just proceed. The export may have failed; check `logs/pre-export-journals/launchd-stderr.log`.
+**If no entries exist or the export directory is empty**: That's fine, just proceed. The export may have failed; check `tail -4 logs/pre-export-journals/launchd-stdout.log` for last night's `Done. Exported N entries.` line. `launchd-stderr.log` is append-only and keeps stale errors from past runs, so never treat a traceback there as current unless the file's mtime is from last night.
 
 ## Step 5: Auto-Tag the Consolidated Content
 

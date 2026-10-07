@@ -46,7 +46,7 @@ Every active job MUST follow this contract — collapsed into one place so indiv
 3. **Do NOT reformat the file before delivery.** Don't read it back, don't rewrite it, don't pipe it through anything. The file IS the message.
 4. **Do NOT send a confirmation message after delivery.** The report itself is the delivery — a follow-up "report delivered" message is redundant noise and double-delivers in Telegram.
 5. **On error, write a short status to the brief file and deliver THAT.** Never silently skip. {{USER_NAME}} needs to know when an upstream data source or credential fails (e.g. a CLI auth error, an expired API token, a search backend returning nothing) — write one line explaining what broke and deliver.
-6. **Deliver exactly once.** If new findings arrive late (e.g., a slow subagent), save them for the next run — don't overwrite and re-deliver.
+6. **Deliver exactly once.** Finish all work, subagents included (foreground only, since a headless run ends with its turn), before writing and delivering; never overwrite and re-deliver.
 
 ## Adding a New Recurring Task
 
