@@ -69,6 +69,7 @@ cat {{MINERU_HOME}}/engine/../mineru_cli/memory_ops/prompts/consolidate_distille
 That file is the source of truth for preserve/remove rules, the cardinal "distill phrasing, never substance" rule, and the general output shape. This job then layers a few framework-specific extensions on top:
 
 - **Also drop** the noise this job's inputs carry: phone numbers in logging metadata, sender IDs, message metadata, system messages, webhook payloads, raw JSON dumps, and verbose tool output from CC session transcripts.
+- **Tool, MCP server and connector status notices are not events.** Session-start banners like "needs authorization", "requires authentication", "failed to connect" or "connection closed" do not go into the consolidated file. Record one only when it actually blocked a task in that session (and then as part of that task's story), and never as an Open Item.
 - **Also add** the framework-specific format shape defined in Step 6 below (YAML frontmatter tags, dedicated Journal section, Artifacts and Open Items sections).
 
 ## Step 4: Read {{USER_NAME}}'s Personal Journal

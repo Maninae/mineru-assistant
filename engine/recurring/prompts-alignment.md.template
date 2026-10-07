@@ -26,6 +26,8 @@ Permanent carve-outs where the "obvious" issue is actually intentional. Verify a
 
 - **Failed cron runs are not re-fired.** Engine policy: the next scheduled cycle picks up on its own, so a failure costs one cycle of coverage (see `prompts/TECHNICAL.md`, "When Jobs Go Silent"). Do NOT propose a catch-up / re-run script.
 
+- **Tool, MCP server and connector status notices are not findings.** Headless runs print "needs authorization" / "failed to connect" banners for connectors the job never used. Do not surface them as issues or forks, and do not propose removing the servers. Flag only a notice that blocked a job's actual work, or one that leaked into memory or a brief as an event or open item (that is a consolidation-prompt bug).
+
 Add install-specific carve-outs below as {{USER_NAME}} decides them.
 
 ---
