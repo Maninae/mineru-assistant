@@ -31,6 +31,8 @@ See `prompts/TECHNICAL.local.md` for the canonical schedule with model assignmen
 
 ## Paused Jobs (do not execute unless explicitly asked)
 
+**Temporary pause (operator switch):** `bin/pause-job <job-name> <YYYY-MM-DD>` skips every run of a launchd job through that date and the job resumes on its own the next day (`--list` to see active pauses, `--resume <job>` to end one early). The job name is the first argument its trigger script passes to `run_cc_job`. Nothing is unloaded from launchd; `scripts/cc-job-lib.sh` checks `cache/paused-jobs/<job>.until` at the start of each run and logs the skip.
+
 List each paused or inactive recipe as one bullet so the alignment pass and readers can see it. A parked job keeps its instruction file in `recurring/` but has no active launchd plist. Shape:
 
 - **`<recipe-file-or-skill>`** — what it did, that it is paused (no launchd plist active), and whether its instructions are still valid as a manual playbook.

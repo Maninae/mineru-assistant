@@ -6,6 +6,8 @@
 #   - cc_alert <job> <exit-code> <reason>   : send single-line Telegram alert
 #   - run_cc_job <name> <model> <instr> [expected-output-glob]
 #                                            : standard run + alert on failure
+#   - paused_until_guard <job-name>         : early-exit while cache/paused-jobs/<job>.until
+#                                            holds a date that is today or later (see bin/pause-job)
 #
 # Notes:
 #   - run_cc_job calls setup_logging + the CC invocation internally.
@@ -180,6 +182,35 @@ _check_expected_output() {
 }
 
 # ----------------------------------------------------------------------------
+# paused_until_guard <job-name>
+#
+# Operator pause switch. If $WORKSPACE/cache/paused-jobs/<job-name>.until exists
+# and holds a YYYY-MM-DD that is today or later, log a skip notice and exit 0
+# (launchd sees success, no failure alert). Once the date has passed the file is
+# trashed so the job resumes on its own. Managed by bin/pause-job.
+paused_until_guard() {
+  local job="$1"
+  local pause_file="$WORKSPACE/cache/paused-jobs/$job.until"
+  [ -f "$pause_file" ] || return 0
+  local until
+  until=$(tr -d '[:space:]' < "$pause_file")
+  case "$until" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) : ;;
+    *) echo "[paused_until_guard] ignoring malformed pause file $pause_file ('$until')"; return 0 ;;
+  esac
+  local today
+  today=$(_today)
+  # ISO dates compare correctly as strings.
+  if [ "$today" \> "$until" ]; then
+    echo "[paused_until_guard] pause expired ($until); resuming and removing $pause_file"
+    if command -v trash >/dev/null 2>&1; then trash "$pause_file" 2>/dev/null || true; else mv "$pause_file" "$pause_file.expired"; fi
+    return 0
+  fi
+  echo "[paused_until_guard] $job is paused until $until — skipping this run."
+  exit 0
+}
+
+# ----------------------------------------------------------------------------
 # setup_logging <job-name>
 #
 # Public helper: create logs/<job>/, rotate old files, redirect stdout/stderr
@@ -244,6 +275,7 @@ run_cc_job() {
   fi
 
   setup_logging "$job"
+  paused_until_guard "$job"
   echo "[$(_timestamp)] CC model=$model instruction=$instr"
 
   local rc=0

@@ -1,0 +1,54 @@
+#!/bin/bash
+# pause-job — pause a Mineru launchd job until a date, or resume / list pauses.
+#
+#   pause-job <job-name> <YYYY-MM-DD>   skip every run of <job-name> through that date (inclusive)
+#   pause-job --resume <job-name>       remove the pause now
+#   pause-job --list                    show active pauses
+#
+# Job names are the first argument the trigger script passes to run_cc_job
+# (e.g. alfie-summary, morning-brief); see scripts/trigger-*.sh. The pause is a
+# dated file under cache/paused-jobs/ that scripts/cc-job-lib.sh checks on every
+# run, so nothing has to be unloaded from launchd and nothing has to be remembered:
+# the job resumes by itself the day after the date.
+set -euo pipefail
+WORKSPACE="${MINERU_HOME:-$HOME/.mineru}"
+PAUSE_DIR="$WORKSPACE/cache/paused-jobs"
+mkdir -p "$PAUSE_DIR"
+
+case "${1:-}" in
+  --list)
+    found=0
+    for f in "$PAUSE_DIR"/*.until; do
+      [ -e "$f" ] || continue
+      found=1
+      printf '%s\tpaused until %s\n' "$(basename "$f" .until)" "$(tr -d '[:space:]' < "$f")"
+    done
+    [ "$found" -eq 1 ] || echo "no paused jobs"
+    ;;
+  --resume)
+    job="${2:?usage: pause-job --resume <job-name>}"
+    f="$PAUSE_DIR/$job.until"
+    if [ -f "$f" ]; then
+      if command -v trash >/dev/null 2>&1; then trash "$f"; else mv "$f" "$f.resumed"; fi
+      echo "$job resumed"
+    else
+      echo "$job was not paused"
+    fi
+    ;;
+  ""|-h|--help)
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    job="$1"
+    until="${2:?usage: pause-job <job-name> <YYYY-MM-DD>}"
+    case "$until" in
+      [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) : ;;
+      *) echo "date must be YYYY-MM-DD" >&2; exit 2 ;;
+    esac
+    if ! ls "$WORKSPACE"/scripts/trigger-*.sh 2>/dev/null | xargs grep -l "run_cc_job \"$job\"" >/dev/null 2>&1; then
+      echo "warning: no trigger script calls run_cc_job \"$job\"; check the name (ls scripts/trigger-*.sh)" >&2
+    fi
+    printf '%s\n' "$until" > "$PAUSE_DIR/$job.until"
+    echo "$job paused through $until (file: $PAUSE_DIR/$job.until)"
+    ;;
+esac
