@@ -79,7 +79,7 @@ Now scan `MEMORY.md` and your freeform structured memory tree under `{{MEMORY_RO
 - Remove stale items from Active Projects that haven't moved in 4+ weeks
 - Before carrying any open item or unanswered question forward (in memory files or the report), verify it still stands against the current canonical docs (TOOLS.md, prompts/GMAIL.md, prompts/TECHNICAL.md) and this week's daily notes. A question that was answered during the week must not resurface as an open item.
 
-- Tool, MCP server and connector status notices ("needs authorization", "failed to connect") are not events or threads. Do not carry them into memory files, the report, or any open-items list unless a daily note shows one actually blocked a task.
+- Tool, MCP server and connector status notices ("needs authorization", "failed to connect") are not events or threads. Do not carry them into memory files, the report, or any open-items list unless a daily note shows one actually blocked a task. Do not write a line saying they did not block anything either: say nothing about them.
 
 **Keep a note of which files you touched — Step 6's report ends with the list.**
 

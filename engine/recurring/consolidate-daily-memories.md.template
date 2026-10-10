@@ -60,7 +60,7 @@ If the file is absent (no Telegram activity that day), just proceed.
 
 Create a **single consolidated memory file** from all sessions.
 
-**Follow the canonical distillation rules that the engine's `mineru memory consolidate` verb also uses.** They live in ONE file so the CLI and this recurring job never drift apart. Read them now:
+**Follow the canonical distillation rules that the engine's `mineru memory consolidate` verb also uses.** They live in ONE file so the CLI and this recurring job never drift apart. Read them now by running the Bash command below exactly as written (the Read tool collapses `engine/..` to a path that does not exist; the shell follows the `engine` symlink):
 
 ```bash
 cat {{MINERU_HOME}}/engine/../mineru_cli/memory_ops/prompts/consolidate_distiller.md
@@ -69,7 +69,7 @@ cat {{MINERU_HOME}}/engine/../mineru_cli/memory_ops/prompts/consolidate_distille
 That file is the source of truth for preserve/remove rules, the cardinal "distill phrasing, never substance" rule, and the general output shape. This job then layers a few framework-specific extensions on top:
 
 - **Also drop** the noise this job's inputs carry: phone numbers in logging metadata, sender IDs, message metadata, system messages, webhook payloads, raw JSON dumps, and verbose tool output from CC session transcripts.
-- **Tool, MCP server and connector status notices are not events.** Session-start banners like "needs authorization", "requires authentication", "failed to connect" or "connection closed" do not go into the consolidated file. Record one only when it actually blocked a task in that session (and then as part of that task's story), and never as an Open Item.
+- **Tool, MCP server and connector status notices are not events.** Session-start banners like "needs authorization", "requires authentication", "failed to connect" or "connection closed" do not go into the consolidated file. Record one only when it actually blocked a task in that session (and then as part of that task's story), and never as an Open Item. Do not write a line saying they did not block anything either: say nothing about them.
 - **Also add** the framework-specific format shape defined in Step 6 below (YAML frontmatter tags, dedicated Journal section, Artifacts and Open Items sections).
 
 ## Step 4: Read {{USER_NAME}}'s Personal Journal
