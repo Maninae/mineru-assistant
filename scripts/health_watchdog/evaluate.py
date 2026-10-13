@@ -135,7 +135,8 @@ def evaluate_disk(snapshot: SystemSnapshot) -> Optional[Finding]:
     if free is None or free >= DISK_FREE_WARN_GB:
         return None
     severity = Severity.CRITICAL if free < DISK_FREE_CRITICAL_GB else Severity.WARN
-    return Finding(CHECK_DISK, severity, "Only %.1f GB free on /." % free, [OFFLOAD_VOLUME_HINT])
+    return Finding(CHECK_DISK, severity, "Only %.1f GB free on /." % free,
+                   [OFFLOAD_VOLUME_HINT] if OFFLOAD_VOLUME_HINT else [])
 
 
 def evaluate_landline(silent_kill_count: int, snapshot: SystemSnapshot) -> Optional[Finding]:

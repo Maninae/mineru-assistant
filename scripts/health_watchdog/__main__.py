@@ -25,6 +25,7 @@ from health_watchdog.config import (
     LOG_ROTATE_BYTES,
     LOG_ROTATE_COUNT,
     PAUSE_FILE,
+    PRIVATE_CONFIG_ERROR,
     STATE_FILE,
     TOP_PROCESS_COUNT,
 )
@@ -149,6 +150,8 @@ def run_once() -> int:
     state = load_state(STATE_FILE)
     state["runs"] = int(state.get("runs", 0)) + 1
     logger.info("run %d start%s", state["runs"], " (DRY_RUN)" if DRY_RUN else "")
+    if PRIVATE_CONFIG_ERROR:
+        logger.warning("ignoring unusable per-install config: %s", PRIVATE_CONFIG_ERROR)
 
     findings = collect_findings(state, now)
     decision = decide_alerts(findings, state, time.time())

@@ -138,6 +138,21 @@ def test_run_with_deadline_times_out_and_kills_a_sleeper():
     assert outcome.elapsed_seconds < 10
 
 
+def test_private_config_loader(tmp_path):
+    from health_watchdog.config import load_private_config
+
+    assert load_private_config(tmp_path / "missing.json") == ({}, "")
+    good = tmp_path / "health-watchdog.json"
+    good.write_text('{"offload_volume": "/Volumes/big", "job_max_age_overrides_seconds": {"x": 60}}')
+    values, error = load_private_config(good)
+    assert error == "" and values["offload_volume"] == "/Volumes/big"
+    bad = tmp_path / "bad.json"
+    bad.write_text("[1, 2]")
+    assert load_private_config(bad)[0] == {} and "JSON object" in load_private_config(bad)[1]
+    bad.write_text("{nope")
+    assert load_private_config(bad)[0] == {} and load_private_config(bad)[1]
+
+
 def test_wait_for_exit_treats_unreaped_zombie_as_exited():
     import os
     import signal

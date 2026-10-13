@@ -52,6 +52,7 @@ Dependencies flow downward only: `__main__` -> probes/actions -> `process_table`
 | Rotating log | `$MINERU_HOME/logs/health-watchdog/watchdog.log` (+ launchd `stdout.log` / `stderr.log`) |
 | State (streaks, cooldowns, active checks, stuck probe pid) | `$MINERU_HOME/cache/health-watchdog-state.json` |
 | Plist template | `engine/launchd/LABEL_PREFIX.health-watchdog.plist.template` |
+| Per-install overrides (optional) | `$MINERU_HOME/config/health-watchdog.json`: `offload_volume`, `job_max_age_overrides_seconds`, `extra_service_command_fragments`; starter at `engine/config/health-watchdog.example.json` |
 
 ## Adding a check
 

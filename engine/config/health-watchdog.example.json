@@ -1,0 +1,8 @@
+{
+  "_comment": "Optional per-install overrides for scripts/health_watchdog. Copy to $MINERU_HOME/config/health-watchdog.json (the profile's config/ dir). Every key is optional.",
+  "offload_volume": "/Volumes/external-drive",
+  "job_max_age_overrides_seconds": {
+    "weekly-deep-consolidation": 14400
+  },
+  "extra_service_command_fragments": []
+}

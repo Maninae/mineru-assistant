@@ -61,9 +61,9 @@ INCIDENT_TABLE = [
          age=30 * HOURS),
     proc(210, 1, "/usr/bin/python3 %s/app/server.py" % HOME, age=16 * 24 * HOURS),
     proc(220, 1, "/opt/homebrew/bin/python3 %s/browser/server.py" % HOME, age=5 * 24 * HOURS),
-    proc(221, 220, "/Users/x/.cloakbrowser/chromium/Chromium.app/Contents/MacOS/Chromium "
+    proc(221, 220, "/opt/cloakbrowser/chromium/Chromium.app/Contents/MacOS/Chromium "
                    "--user-data-dir=%s/cache/cloakbrowser-profile" % HOME, age=5 * 24 * HOURS),
-    proc(222, 221, "/Users/x/.cloakbrowser/chromium/Chromium.app/Contents/MacOS/Chromium Helper "
+    proc(222, 221, "/opt/cloakbrowser/chromium/Chromium.app/Contents/MacOS/Chromium Helper "
                    "--type=renderer --user-data-dir=%s/cache/cloakbrowser-profile" % HOME,
          age=5 * 24 * HOURS, cpu=98.0),
     # Interactive sessions: TTY-attached, or a headless resume without the job marker.

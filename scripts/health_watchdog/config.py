@@ -7,8 +7,10 @@ Every tunable lives here as a named constant. Paths derive from MINERU_HOME (the
 workspace) and HOME so the package carries no per-install literals.
 """
 
+import json
 import os
 from pathlib import Path
+from typing import Any, Dict, Tuple
 
 MINERU_HOME = Path(os.environ.get("MINERU_HOME", str(Path.home() / ".mineru")))
 LAUNCHD_PREFIX = os.environ.get("MINERU_LAUNCHD_PREFIX", "com.mineru")
@@ -89,7 +91,6 @@ LANDLINE_LOG_TAIL_BYTES = 2_000_000
 # Disk on /.
 DISK_FREE_WARN_GB = 10.0
 DISK_FREE_CRITICAL_GB = 5.0
-OFFLOAD_VOLUME_HINT = "/Volumes/vega is the place for big files."
 
 TOP_PROCESS_COUNT = 5
 
@@ -127,3 +128,40 @@ JOB_COMMAND_MARKERS = (
 CC_JOB_PROMPT_MARKER = "recurring/"
 CC_BINARY_NAMES = ("claude", "claude-fda")
 NO_TTY = "??"
+
+# ---------------------------------------------------------------------------
+# Optional per-install overrides: $MINERU_HOME/config/health-watchdog.json
+# (starter: engine/config/health-watchdog.example.json). Same engine-vs-profile
+# split the other scripts use, so operator specifics never land in engine code.
+PRIVATE_CONFIG_PATH = Path(
+    os.environ.get("MINERU_HEALTH_WATCHDOG_CONFIG", str(MINERU_HOME / "config" / "health-watchdog.json"))
+)
+PRIVATE_CONFIG_ERROR = ""  # set when the file exists but cannot be used; __main__ logs it
+
+
+def load_private_config(path: Path) -> Tuple[Dict[str, Any], str]:
+    """(values, error) from the optional JSON file; a missing file is simply ({}, "")."""
+    if not path.exists():
+        return {}, ""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            loaded = json.load(handle)
+    except (OSError, ValueError) as load_error:
+        return {}, "%s: %s" % (path, load_error)
+    if not isinstance(loaded, dict):
+        return {}, "%s: top level must be a JSON object" % path
+    return loaded, ""
+
+
+_private, PRIVATE_CONFIG_ERROR = load_private_config(PRIVATE_CONFIG_PATH)
+
+# Where big files should go instead of /; empty string = no hint in disk alerts.
+OFFLOAD_VOLUME = str(_private.get("offload_volume", "") or "")
+OFFLOAD_VOLUME_HINT = ("%s is the place for big files." % OFFLOAD_VOLUME) if OFFLOAD_VOLUME else ""
+JOB_MAX_AGE_OVERRIDES_SECONDS.update({
+    str(suffix): int(seconds)
+    for suffix, seconds in dict(_private.get("job_max_age_overrides_seconds", {}) or {}).items()
+})
+SERVICE_COMMAND_ALLOWLIST = SERVICE_COMMAND_ALLOWLIST + tuple(
+    str(fragment) for fragment in list(_private.get("extra_service_command_fragments", []) or [])
+)
