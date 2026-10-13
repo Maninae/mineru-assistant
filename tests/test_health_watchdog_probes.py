@@ -138,6 +138,21 @@ def test_run_with_deadline_times_out_and_kills_a_sleeper():
     assert outcome.elapsed_seconds < 10
 
 
+def test_wait_for_exit_treats_unreaped_zombie_as_exited():
+    import os
+    import signal
+    import subprocess
+
+    from health_watchdog.subprocess_deadline import process_alive, wait_for_exit
+
+    child = subprocess.Popen(["/bin/sleep", "300"])
+    os.kill(child.pid, signal.SIGKILL)
+    # Not reaped yet: kill(0) still says alive, but the killer must not call it a survivor.
+    assert process_alive(child.pid)
+    assert wait_for_exit([child.pid], grace_seconds=3) == []
+    child.wait(timeout=5)
+
+
 def test_run_with_deadline_captures_output_and_start_errors():
     ok = run_with_deadline(["/bin/echo", "hi"], deadline_seconds=5)
     assert ok.succeeded and ok.stdout.strip() == "hi"

@@ -17,7 +17,10 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 ESCALATION_GRACE_SECONDS = 2.0
-POLL_INTERVAL_SECONDS = 0.1
+KILL_POLL_INTERVAL_SECONDS = 0.5
+PS_BIN = "/bin/ps"
+PS_STAT_DEADLINE_SECONDS = 5
+ZOMBIE_STATE = "Z"
 
 STATUS_OK = "ok"
 STATUS_TIMEOUT = "timeout"
@@ -136,12 +139,35 @@ def run_with_deadline(
     )
 
 
+def live_pids(pids: List[int]) -> List[int]:
+    """Subset of `pids` still running, with zombies counted as exited.
+
+    kill(pid, 0) says a zombie is alive, and a killed job's children sit as zombies
+    of their dying parent for a moment, so one `ps -o stat` call decides instead;
+    if ps itself fails, fall back to the signal check.
+    """
+    if not pids:
+        return []
+    try:
+        result = subprocess.run(
+            [PS_BIN, "-o", "pid=,stat=", "-p", ",".join(str(pid) for pid in pids)],
+            capture_output=True, text=True, timeout=PS_STAT_DEADLINE_SECONDS,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return [pid for pid in pids if process_alive(pid)]
+    running = set()
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and fields[0].isdigit() and not fields[1].startswith(ZOMBIE_STATE):
+            running.add(int(fields[0]))
+    return [pid for pid in pids if pid in running]
+
+
 def wait_for_exit(pids: List[int], grace_seconds: float) -> List[int]:
-    """Poll until every pid is gone or the grace expires; return the survivors."""
+    """Poll until every pid is gone (or a zombie) or the grace expires; return the survivors."""
     deadline = time.monotonic() + grace_seconds
-    remaining = list(pids)
+    remaining = live_pids(list(pids))
     while remaining and time.monotonic() < deadline:
-        remaining = [pid for pid in remaining if process_alive(pid)]
-        if remaining:
-            time.sleep(POLL_INTERVAL_SECONDS)
+        time.sleep(KILL_POLL_INTERVAL_SECONDS)
+        remaining = live_pids(remaining)
     return remaining
