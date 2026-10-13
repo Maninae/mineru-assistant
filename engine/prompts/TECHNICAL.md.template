@@ -105,6 +105,16 @@ Google auth is layered and each layer fails independently:
 
 ---
 
+## System Health Watchdog
+
+`<prefix>.health-watchdog` runs `scripts/health_watchdog/` every 5 minutes and alerts Telegram (one batched message per run, per-check cooldowns, a "recovered" line when a check clears). It catches the wedged-Mac failure mode: a stuck `tccd` (protected-file reads hang; fix is `sudo killall tccd` or a reboot), sustained tccd CPU, swap/memory pressure, sustained load, hung scheduled jobs (auto-killed after 3 h; a process that survives SIGKILL is reported as tccd evidence), a leaked stealth-browser tab pile or hot renderer (stopped via `bin/browser action=stop`), repeated Landline silent-kills, and low disk on `/`. KeepAlive services, anything attached to a TTY, and other users' processes are never killed.
+
+- Dry run: `DRY_RUN=1 PYTHONPATH=scripts /usr/bin/python3 -m health_watchdog` (prints, changes nothing).
+- Pause: `bin/pause-job health-watchdog YYYY-MM-DD`; stop entirely: `launchctl bootout gui/$(id -u)/<prefix>.health-watchdog`.
+- Logs `logs/health-watchdog/`, state `cache/health-watchdog-state.json`, thresholds in `scripts/health_watchdog/config.py`, design notes in `scripts/health_watchdog/CLAUDE.md`.
+
+---
+
 ## Session Reset
 
 Automatic daily reset is **disabled**. {{USER_NAME}} manually runs `/new` when ready to reset. The daemon warns once each as context crosses 30%, 50%, and 70% of the 1M window (Landline `CONTEXT_WARN_THRESHOLDS`). The 1 AM consolidation job reads CC JSONL files directly for session persistence.
