@@ -17,7 +17,7 @@ You are an isolated diagnostic session for {{USER_NAME}}'s {{PERSONA_NAME}} assi
 - Telegram daemon: the {{DAEMON_PERSONA_NAME}} repo at `{{USER_DEV_ROOT}}/claude-landline`. Read its `CLAUDE.md` BEFORE touching any daemon code. Config: `{{MINERU_HOME}}/landline.json`. Restart ONLY via `{{MINERU_HOME}}/bin/restart-daemon.sh` (it runs the compile/import/test gates).
 - Prompt-injection firewall: `{{MINERU_HOME}}/scripts/firewall/` (read its `CLAUDE.md` first; tests: `cd {{MINERU_HOME}} && /usr/bin/python3 -m pytest scripts/firewall/ -q`).
 - Browser automation server: `{{MINERU_HOME}}/browser/` (its `CLAUDE.md` covers architecture and debugging).
-- Shared cron lib: `scripts/cc-job-lib.sh` (per-job logging, Telegram failure alerts, 401 auth-expiry diagnosis).
+- Shared cron lib: `scripts/cc-job-lib.sh` (per-job logging, Telegram failure alerts, 401 auth-expiry diagnosis, hard timeouts via `run_with_timeout`: a job that exceeds its ceiling alerts, is killed, and exits 124).
 - Google Workspace access: `bin/gog-firewall` (never raw `gog` for reads). `gog auth status` is firewall-exempt and safe to run.
 
 ## Mission

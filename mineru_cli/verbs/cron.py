@@ -1004,7 +1004,7 @@ def _idempotency_guard_should_skip(
 def _build_standard_prompt(instruction_relative: str) -> str:
     """Return the standard `Read <instr> and execute the job.` prompt.
 
-    Matches `cc-job-lib.sh::run_cc_job` line 252 verbatim. Any change
+    Matches the prompt string in `cc-job-lib.sh::run_cc_job` verbatim. Any change
     here needs a coordinated update on the bash side; that is why the
     live trigger scripts still SOURCE cc-job-lib.sh today and the runner
     reproduces the string exactly.
@@ -1083,7 +1083,7 @@ def _alert_command(deliver_argv: List[str], message: str) -> List[str]:
 def _cc_argv(cc_bin: str, model: str, prompt: str) -> List[str]:
     """Return the exact CC argv `cc-job-lib.sh::run_cc_job` uses.
 
-    Line 251 of cc-job-lib.sh:
+    The bash side (wrapped in `run_with_timeout`, which does not alter argv):
       "$CC_BIN" --permission-mode bypassPermissions --model "$model" \\
                 --verbose --print "Read $instr and execute the job."
 
