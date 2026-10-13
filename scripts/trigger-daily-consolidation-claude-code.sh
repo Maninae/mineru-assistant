@@ -8,7 +8,8 @@
 #   * Extract Claude Code session transcripts into memory/daily/ fragments.
 # These pre-steps are kept inline; CC prompt is custom-built (with a YESTERDAY
 # date pin), so we don't use run_cc_job here. We do use the shared lib for log
-# setup, retention, and failure alerting.
+# setup, retention, failure alerting, and the hard timeouts (run_with_timeout
+# around each pre-step and the CC run).
 
 set -euo pipefail
 . "$(dirname "$0")/cc-job-lib.sh"
@@ -34,15 +35,20 @@ if [ "$RECENT_EXPORTS" -gt 0 ]; then
   echo "$(date): Found $RECENT_EXPORTS recent journal exports (< 3 hours old) — skipping re-export."
 else
   echo "$(date): No recent exports found. Exporting daily journals from Apple Notes..."
-  if ! /usr/bin/python3 scripts/export-journals.py 30; then
+  # The Notes store read is TCC-guarded: a wedged tccd blocks it forever, hence the ceiling.
+  if ! run_with_timeout "$CC_JOB_STEP_TIMEOUT_SECONDS" "daily-consolidation" -- \
+       /usr/bin/python3 scripts/export-journals.py 30; then
     echo "$(date): WARNING: Journal export failed, continuing without journals"
-    cc_alert "daily-consolidation" "1" "journal export step failed (continuing)"
+    if [ "${RUN_WITH_TIMEOUT_FIRED:-0}" -eq 0 ]; then
+      cc_alert "daily-consolidation" "1" "journal export step failed (continuing)"
+    fi
   fi
 fi
 
 # Extract Claude Code session transcripts into memory/daily/ fragments.
 echo "$(date): Extracting Claude Code sessions for $YESTERDAY..."
-python3 scripts/extract-cc-sessions.py --since "$YESTERDAY" || {
+run_with_timeout "$CC_JOB_STEP_TIMEOUT_SECONDS" "daily-consolidation" -- \
+  python3 scripts/extract-cc-sessions.py --since "$YESTERDAY" || {
   echo "$(date): WARNING: CC session extraction failed, continuing without CC sessions"
 }
 
@@ -51,13 +57,17 @@ PROMPT="$(cat recurring/consolidate-daily-memories.md)
 IMPORTANT: The target date for this consolidation run is $YESTERDAY. Use this date everywhere instead of computing yesterday's date yourself."
 
 rc=0
-"$CC_BIN" --permission-mode bypassPermissions --model claude-sonnet-5-5 --verbose --print \
+run_with_timeout "$CC_JOB_TIMEOUT_SECONDS" "daily-consolidation" -- \
+  "$CC_BIN" --permission-mode bypassPermissions --model claude-sonnet-5-5 --verbose --print \
   "$PROMPT" || rc=$?
 
 echo "$(date): CC exited with code $rc"
 
 # Expected output: memory/daily/<YESTERDAY>.md should now exist (and be fresh).
-if [ "$rc" -ne 0 ]; then
+# A timed-out CC run has already alerted inside run_with_timeout.
+if [ "${RUN_WITH_TIMEOUT_FIRED:-0}" -eq 1 ]; then
+  :
+elif [ "$rc" -ne 0 ]; then
   cc_alert "daily-consolidation" "$rc" "CC exited nonzero"
 elif [ ! -f "$CONSOLIDATED" ]; then
   cc_alert "daily-consolidation" "$rc" "expected output not produced: memory/daily/${YESTERDAY}.md"
