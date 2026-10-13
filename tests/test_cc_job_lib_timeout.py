@@ -12,6 +12,8 @@ Covered:
     tree (parent shell and its sleep), returns 124, sets RUN_WITH_TIMEOUT_FIRED
   * a child that ignores SIGTERM is SIGKILLed after the grace period
   * nothing is left running afterwards (checked with pgrep on a unique marker)
+  * run_cc_job applies CC_JOB_TIMEOUT_SECONDS, alerts exactly once on a hang,
+    and logs the ceiling it used
   * usage errors return 2
 """
 
@@ -167,3 +169,45 @@ def test_usage_errors_return_2(tmp_path: Path, call: str) -> None:
     proc = _run_lib(tmp_path, f'rc=0; {call} || rc=$?; echo "RESULT rc=$rc"')
     assert _result_line(proc.stdout) == "RESULT rc=2"
     assert "run_with_timeout:" in proc.stderr
+
+
+def test_run_cc_job_hang_alerts_once_and_exits_124(tmp_path: Path) -> None:
+    marker = f"rwt-{uuid.uuid4().hex}"
+    cc_stub = _write_executable(tmp_path / "cc-stub.sh", f": {marker}\nsleep 3611\n")
+    proc = _run_lib(
+        tmp_path,
+        'run_cc_job demo-job claude-demo recurring/demo.md "briefs_demo/*.md"',
+        cc_bin=str(cc_stub),
+        extra_env={"CC_JOB_TIMEOUT_SECONDS": "1"},
+    )
+
+    assert proc.returncode == 124, (proc.stdout, proc.stderr)
+    alerts = _alerts(tmp_path)
+    assert len(alerts) == 1, alerts
+    assert "timed out after 1s" in alerts[0]
+    assert not _still_running(marker)
+
+    logs = list((tmp_path / "workspace" / "logs" / "demo-job").glob("*.log"))
+    assert len(logs) == 1
+    log_text = logs[0].read_text()
+    assert "timeout=1s" in log_text
+    assert "run_with_timeout: demo-job exceeded 1s" in log_text
+    assert "CC exited with code 124" in log_text
+    assert "Done (final rc=124)" in log_text
+
+
+def test_run_cc_job_normal_run_logs_default_ceiling(tmp_path: Path) -> None:
+    proc = _run_lib(tmp_path, "run_cc_job demo-job claude-demo recurring/demo.md", cc_bin="/bin/echo")
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
+    assert _alerts(tmp_path) == []
+    log_text = next((tmp_path / "workspace" / "logs" / "demo-job").glob("*.log")).read_text()
+    assert "timeout=3600s" in log_text
+    assert "CC exited with code 0" in log_text
+
+
+def test_run_cc_job_honours_per_job_override(tmp_path: Path) -> None:
+    snippet = "CC_JOB_TIMEOUT_SECONDS=5400\nrun_cc_job demo-job claude-demo recurring/demo.md"
+    proc = _run_lib(tmp_path, snippet, cc_bin="/bin/echo")
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
+    log_text = next((tmp_path / "workspace" / "logs" / "demo-job").glob("*.log")).read_text()
+    assert "timeout=5400s" in log_text

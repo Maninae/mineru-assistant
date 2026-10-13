@@ -450,17 +450,20 @@ run_cc_job() {
 
   setup_logging "$job"
   paused_until_guard "$job"
-  echo "[$(_timestamp)] CC model=$model instruction=$instr"
+  echo "[$(_timestamp)] CC model=$model instruction=$instr timeout=${CC_JOB_TIMEOUT_SECONDS}s"
 
   local rc=0
-  # Run CC. Note: $CC_BIN may be overridden in tests (e.g. /bin/echo).
-  "$CC_BIN" --permission-mode bypassPermissions --model "$model" --verbose --print \
+  # Run CC under the hard ceiling. Note: $CC_BIN may be overridden in tests (e.g. /bin/echo).
+  run_with_timeout "$CC_JOB_TIMEOUT_SECONDS" "$job" -- \
+    "$CC_BIN" --permission-mode bypassPermissions --model "$model" --verbose --print \
     "Read $instr and execute the job." || rc=$?
 
   echo "[$(_timestamp)] CC exited with code $rc"
 
-  # Check expected output.
-  if [ "$rc" -ne 0 ]; then
+  # Check expected output. A timeout already alerted, so it needs no second one.
+  if [ "${RUN_WITH_TIMEOUT_FIRED:-0}" -eq 1 ]; then
+    :
+  elif [ "$rc" -ne 0 ]; then
     _send_failure_alert "$job" "$rc" "CC exited nonzero"
   elif [ -n "$expected" ]; then
     if ! _check_expected_output "$expected"; then
