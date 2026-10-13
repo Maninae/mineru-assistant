@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LAUNCHD_PREFIX}}.health-watchdog</string>
+
+    <!-- bash must be the launchd-responsible process: TCC's Full Disk Access grant
+         for the scheduled jobs rides on /bin/bash, and a python3-rooted job is denied
+         chat.db (verified on 2026-10-13). No `exec`, so bash stays the parent. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>/usr/bin/python3 -m health_watchdog</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>300</integer>
+
+    <key>TimeOut</key>
+    <integer>240</integer>
+
+    <key>WorkingDirectory</key>
+    <string>{{MINERU_HOME}}</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{USER_HOME}}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>{{USER_HOME}}</string>
+        <key>PYTHONPATH</key>
+        <string>{{MINERU_HOME}}/scripts</string>
+        <key>MINERU_HOME</key>
+        <string>{{MINERU_HOME}}</string>
+        <key>MINERU_LAUNCHD_PREFIX</key>
+        <string>{{LAUNCHD_PREFIX}}</string>
+        <key>MINERU_KEYCHAIN_ACCOUNT</key>
+        <string>{{KEYCHAIN_ACCOUNT}}</string>
+        <key>MINERU_INJECT_QUEUE_DIR</key>
+        <string>{{MINERU_INJECT_QUEUE_DIR}}</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>{{MINERU_HOME}}/logs/health-watchdog/stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{MINERU_HOME}}/logs/health-watchdog/stderr.log</string>
+</dict>
+</plist>
