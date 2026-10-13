@@ -1,0 +1,129 @@
+"""Thresholds, paths, deadlines, and allowlists for the health watchdog.
+
+Python 3.9 compatible (launchd runs this under /usr/bin/python3): no `X | None`,
+no `match`, typing.Optional/List/Dict instead of builtin generics in annotations.
+
+Every tunable lives here as a named constant. Paths derive from MINERU_HOME (the
+workspace) and HOME so the package carries no per-install literals.
+"""
+
+import os
+from pathlib import Path
+
+MINERU_HOME = Path(os.environ.get("MINERU_HOME", str(Path.home() / ".mineru")))
+LAUNCHD_PREFIX = os.environ.get("MINERU_LAUNCHD_PREFIX", "com.mineru")
+LAUNCH_AGENTS_DIR = Path.home() / "Library" / "LaunchAgents"
+
+WATCHDOG_JOB_NAME = "health-watchdog"
+LOG_DIR = MINERU_HOME / "logs" / WATCHDOG_JOB_NAME
+LOG_FILE = LOG_DIR / "watchdog.log"
+LOG_ROTATE_BYTES = 1_000_000
+LOG_ROTATE_COUNT = 3
+STATE_FILE = MINERU_HOME / "cache" / "health-watchdog-state.json"
+# Same pause convention as cc-job-lib.sh: `bin/pause-job health-watchdog YYYY-MM-DD`.
+PAUSE_FILE = MINERU_HOME / "cache" / "paused-jobs" / (WATCHDOG_JOB_NAME + ".until")
+
+DELIVER_SCRIPT = MINERU_HOME / "scripts" / "deliver-output.py"
+BROWSER_CLI = MINERU_HOME / "bin" / "browser"
+BROWSER_TABS_SNAPSHOT = MINERU_HOME / "cache" / "browser-tabs.json"
+BROWSER_PROFILE_DIR = MINERU_HOME / "cache" / "cloakbrowser-profile"
+BROWSER_PORT = int(os.environ.get("MINERU_BROWSER_PORT", "9471"))
+LANDLINE_DAEMON_LOG = MINERU_HOME / "logs" / "telegram-daemon" / "daemon.log"
+
+# TCC probe: a read-only sqlite query against Messages' chat.db. Under launchd the
+# Full Disk Access grant follows the job's MAIN program: with /bin/bash as the
+# program every Apple-signed child (sqlite3, /usr/bin/python3) can read chat.db;
+# with /usr/bin/python3 as the program all of them are denied. Hence the plist
+# runs `bash -c "python3 -m health_watchdog"`. Homebrew python and imsg fail either way.
+TCC_PROBE_DB = Path.home() / "Library" / "Messages" / "chat.db"
+TCC_PROBE_SQLITE_BIN = "/usr/bin/sqlite3"
+TCC_PROBE_QUERY = "select count(*) from chat;"
+TCC_FIX_TEXT = (
+    "Fix: run `sudo killall tccd` (safe, launchd respawns it) or reboot."
+)
+
+DRY_RUN = os.environ.get("DRY_RUN", "").strip().lower() not in ("", "0", "false", "no")
+
+# Deadlines (seconds). Every subprocess the watchdog starts is bounded by one.
+TCC_PROBE_DEADLINE_SECONDS = 20
+QUICK_COMMAND_DEADLINE_SECONDS = 10
+DELIVER_DEADLINE_SECONDS = 60
+BROWSER_HTTP_DEADLINE_SECONDS = 5
+BROWSER_STOP_DEADLINE_SECONDS = 30
+NOTIFY_DEADLINE_SECONDS = 5
+KILL_TERM_GRACE_SECONDS = 10
+KILL_KILL_GRACE_SECONDS = 5
+
+# tccd CPU (ps %cpu, a decaying ~1 min average) sustained across runs.
+TCCD_CPU_WARN_PERCENT = 50.0
+TCCD_CPU_SUSTAINED_RUNS = 3
+
+# Memory: swap used fraction (sysctl vm.swapusage) and memory_pressure free %.
+# macOS grows swap on demand, so used/total sits near 70% in normal operation.
+SWAP_USED_WARN_FRACTION = 0.80
+SWAP_USED_CRITICAL_FRACTION = 0.90
+MEMORY_FREE_WARN_PERCENT = 15
+MEMORY_FREE_CRITICAL_PERCENT = 5
+
+# Load: 5-minute average divided by core count, sustained across runs.
+LOAD_PER_CORE_WARN = 1.0
+LOAD_PER_CORE_CRITICAL = 1.5
+LOAD_SUSTAINED_RUNS = 3
+
+# Hung jobs: normal CC jobs finish in 1-25 min and the largest plist TimeOut is 2 h.
+MAX_JOB_AGE_SECONDS = 3 * 3600
+# Per-job overrides keyed by label suffix (the part after LAUNCHD_PREFIX + ".").
+JOB_MAX_AGE_OVERRIDES_SECONDS = {}  # type: dict
+
+# Browser hygiene.
+MAX_BROWSER_TABS = 12
+BROWSER_RENDERER_CPU_PERCENT = 50.0
+BROWSER_RENDERER_CPU_SUSTAINED_RUNS = 3
+BROWSER_TAB_SUMMARY_LIMIT = 8
+
+# Landline: "Claude silent for Ns, killing process" lines within the window.
+LANDLINE_SILENT_WINDOW_SECONDS = 6 * 3600
+LANDLINE_SILENT_WARN_COUNT = 2
+LANDLINE_LOG_TAIL_BYTES = 2_000_000
+
+# Disk on /.
+DISK_FREE_WARN_GB = 10.0
+DISK_FREE_CRITICAL_GB = 5.0
+OFFLOAD_VOLUME_HINT = "/Volumes/vega is the place for big files."
+
+TOP_PROCESS_COUNT = 5
+
+# Alert cooldowns per check; an escalation (WARN -> CRITICAL) bypasses them.
+WARN_COOLDOWN_SECONDS = 2 * 3600
+CRITICAL_COOLDOWN_SECONDS = 30 * 60
+
+# ---------------------------------------------------------------------------
+# Hung-job selector allowlists. False-kill is worse than false-negative, so
+# every list here widens the protected set, never the kill set.
+
+# Label suffixes that are services, even if a plist lacks KeepAlive.
+SERVICE_LABEL_ALLOWLIST = (
+    "telegram-daemon",
+    "webapp",
+    "daemon-watchdog",
+    WATCHDOG_JOB_NAME,
+)
+# Command-line fragments that mark a long-running service process (and its tree).
+SERVICE_COMMAND_ALLOWLIST = (
+    "-m landline",
+    "/app/server.py",
+    "/browser/server.py",
+    "Chromium",
+    "cloakbrowser",
+)
+# Command-line fragments that mark a process as part of a scheduled job.
+JOB_COMMAND_MARKERS = (
+    str(MINERU_HOME / "scripts") + "/",
+    "imsg-firewall",
+    "imsg-named",
+)
+# run_cc_job's prompt is "Read recurring/<job>.md and execute the job.", so a
+# headless `claude --print` carrying this marker is a scheduled CC job.
+CC_JOB_PROMPT_MARKER = "recurring/"
+CC_BINARY_NAMES = ("claude", "claude-fda")
+NO_TTY = "??"
