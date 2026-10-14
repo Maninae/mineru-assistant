@@ -57,13 +57,20 @@ def _run_lib(
     snippet: str,
     cc_bin: str = "/usr/bin/false",
     extra_env: Optional[Dict[str, str]] = None,
+    shell_opts: str = "set -euo pipefail",
+    path_prefix: Optional[Path] = None,
 ) -> subprocess.CompletedProcess:
-    """Source the library in a fresh bash and run `snippet`, the way trigger scripts do."""
+    """Source the library in a fresh bash and run `snippet`, the way trigger scripts do.
+
+    `shell_opts` is the option line the sourcing script would have set; `path_prefix`
+    is prepended to PATH so a test can shadow a system tool such as `ps`.
+    """
     deliver = _deliver_stub(tmp_path)
     workspace = tmp_path / "workspace"
     workspace.mkdir(exist_ok=True)
+    path = "/usr/bin:/bin" if path_prefix is None else f"{path_prefix}:/usr/bin:/bin"
     env = {
-        "PATH": "/usr/bin:/bin",
+        "PATH": path,
         "HOME": str(tmp_path),
         "WORKSPACE": str(workspace),
         "DELIVER_BIN": str(deliver["stub"]),
@@ -72,7 +79,7 @@ def _run_lib(
     env.update(FAST_GRACE_ENV)
     if extra_env:
         env.update(extra_env)
-    script = f'set -euo pipefail\n. "{LIB}"\n{snippet}\n'
+    script = f'{shell_opts}\n. "{LIB}"\n{snippet}\n'
     return subprocess.run(
         ["/bin/bash", "-c", script],
         stdin=subprocess.DEVNULL,
@@ -149,6 +156,39 @@ def test_child_ignoring_sigterm_is_sigkilled(tmp_path: Path) -> None:
     assert len(_alerts(tmp_path)) == 1
     assert not _still_running(marker)
     assert not _still_running("sleep 3609")
+
+
+@pytest.mark.parametrize("shell_opts", ["set -e", "set -euo pipefail"])
+def test_failing_ps_never_trips_set_e(tmp_path: Path, shell_opts: str) -> None:
+    """The pid-recycling guard shells out to `ps`; a failing `ps` must not abort the caller.
+
+    A `ps` stub that always exits 1 shadows the real one. The normal path is a BARE
+    call (no `|| rc=$?`): bash ignores -e inside a function invoked in a `||` list,
+    so only a bare call exposes an unguarded failing assignment. The script must
+    reach its RESULT line, and the timeout path must still fire (the guard is simply
+    skipped when no start time could be recorded).
+    """
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    _write_executable(stub_dir / "ps", "exit 1\n")
+
+    proc = _run_lib(
+        tmp_path,
+        'run_with_timeout 10 demo-job -- /bin/sh -c "exit 0"\necho "RESULT rc=$? fired=$RUN_WITH_TIMEOUT_FIRED"',
+        shell_opts=shell_opts,
+        path_prefix=stub_dir,
+    )
+    assert _result_line(proc.stdout) == "RESULT rc=0 fired=0", (proc.stdout, proc.stderr)
+
+    marker = f"rwt-{uuid.uuid4().hex}"
+    proc = _run_lib(
+        tmp_path,
+        REPORT.format(limit=1, cmd=f"/bin/sh -c ': {marker}; sleep 3612'"),
+        shell_opts=shell_opts,
+        path_prefix=stub_dir,
+    )
+    assert _result_line(proc.stdout) == "RESULT rc=124 fired=1", (proc.stdout, proc.stderr)
+    assert not _still_running(marker)
 
 
 def test_zero_limit_disables_ceiling(tmp_path: Path) -> None:

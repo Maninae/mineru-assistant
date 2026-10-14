@@ -258,7 +258,8 @@ _rwt_wait_for_exit() {
 # The process's start time as `ps` prints it (empty if the pid is gone). Used to
 # tell our child from an unrelated process that recycled its pid after exit.
 _rwt_process_start() {
-  ps -o lstart= -p "$1" 2>/dev/null | sed 's/^ *//'
+  # `|| true`: a vanished pid makes ps fail, which must never trip a caller's set -e.
+  ps -o lstart= -p "$1" 2>/dev/null | sed 's/^ *//' || true
 }
 
 # ----------------------------------------------------------------------------
@@ -335,7 +336,7 @@ run_with_timeout() {
     set +m
   fi
   local child_start
-  child_start=$(_rwt_process_start "$child")
+  child_start=$(_rwt_process_start "$child") || child_start=""
 
   trap "_rwt_forward_signal $child" INT TERM HUP
   local started=$SECONDS
