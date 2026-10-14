@@ -3,9 +3,10 @@
 Python 3.9 compatible (see config.py).
 
 Run order matters: the cheap kernel-level reads (ps, launchctl, sysctl) go first
-so they are in hand even if the TCC probe hangs; the hung-job killer and browser
-stop are the only actions, both honoured by DRY_RUN; the single Telegram message
-goes out last. Exit code is 0 unless the run itself crashed.
+so they are in hand even if the TCC probe hangs; the OrbStack probe (up to two 30 s
+deadlines, more during a restart) runs after the browser checks. The hung-job
+killer, the browser stop, orphan termination and the OrbStack restart are the only
+actions, all honoured by DRY_RUN; the single Telegram message goes out last. Exit code is 0 unless the run itself crashed.
 """
 
 import datetime as dt
@@ -17,13 +18,22 @@ import time
 import traceback
 from typing import List
 
-from health_watchdog import alerting, browser_hygiene, evaluate, hung_jobs, landline_health
+from health_watchdog import (
+    alerting,
+    browser_hygiene,
+    evaluate,
+    evaluate_orbstack,
+    hung_jobs,
+    landline_health,
+    orbstack_health,
+)
 from health_watchdog.config import (
     DRY_RUN,
     LOG_DIR,
     LOG_FILE,
     LOG_ROTATE_BYTES,
     LOG_ROTATE_COUNT,
+    ORBSTACK_AUTO_RESTART,
     PAUSE_FILE,
     PRIVATE_CONFIG_ERROR,
     STATE_FILE,
@@ -128,6 +138,27 @@ def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
                        orphan_pids, DRY_RUN, killed, survivors)
         findings.append(evaluate.orphaned_browser_finding(len(orphans), killed, survivors, DRY_RUN))
 
+    findings.extend(handle_orbstack(state, now.timestamp()))
+    return findings
+
+
+def handle_orbstack(state: dict, now_ts: float) -> List[Finding]:
+    """Probe OrbStack, evaluate, and restart it when the evaluator says so."""
+    health = orbstack_health.inspect_orbstack()
+    if health.liveness != orbstack_health.PROBE_NOT_INSTALLED:
+        logger.info("orbstack: %s (%s); %s; stuck-exit pids %s", health.liveness, health.detail,
+                    evaluate_orbstack.helper_stats_line(health), health.stuck_exiting_pids)
+    verdict = evaluate_orbstack.evaluate_orbstack(health, state, now_ts, ORBSTACK_AUTO_RESTART)
+    findings = list(verdict.findings)
+    if verdict.restart_reason:
+        report = None
+        if not DRY_RUN:
+            # Cooldown starts before the attempt, so a crash mid-restart cannot loop it.
+            evaluate_orbstack.record_restart(state, now_ts)
+            report = orbstack_health.restart_orbstack()
+            logger.warning("orbstack restart (%s): came_back=%s after=%s (%s)", verdict.restart_reason,
+                           report.came_back, report.liveness_after, report.detail_after)
+        findings.append(evaluate_orbstack.restart_finding(verdict.restart_reason, report, DRY_RUN))
     return findings
 
 

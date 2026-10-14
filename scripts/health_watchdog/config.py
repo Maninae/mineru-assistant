@@ -100,6 +100,34 @@ BROWSER_TAB_SUMMARY_LIMIT = 8
 BROWSER_SERVER_COMMAND_MARKER = "/browser/server.py"
 BROWSER_ORPHAN_SUSTAINED_RUNS = 2
 
+# OrbStack (the Docker/Linux VM). A VM whose memory got swapped out spins its helper
+# at 300-400% CPU doing no real work, and every `docker` call hangs. Any `docker` call
+# also AUTO-LAUNCHES a stopped OrbStack, so docker is probed only after `orb status`
+# says Running. Binaries are looked up by absolute path: launchd's PATH has no
+# /opt/homebrew or /usr/local.
+ORBSTACK_APP_PATH = Path("/Applications/OrbStack.app")
+ORB_BIN_CANDIDATES = (
+    "/opt/homebrew/bin/orb",
+    "/usr/local/bin/orb",
+    str(ORBSTACK_APP_PATH / "Contents" / "MacOS" / "bin" / "orb"),
+)
+DOCKER_BIN_CANDIDATES = (
+    "/usr/local/bin/docker",
+    "/opt/homebrew/bin/docker",
+    str(Path.home() / ".orbstack" / "bin" / "docker"),
+    str(ORBSTACK_APP_PATH / "Contents" / "MacOS" / "xbin" / "docker"),
+)
+ORBSTACK_HELPER_COMMAND_MARKER = "OrbStack Helper"
+ORBSTACK_STATUS_DEADLINE_S = 30
+ORBSTACK_DOCKER_PROBE_DEADLINE_S = 30
+ORBSTACK_RESTART_DEADLINE_S = 120
+ORBSTACK_HELPER_CPU_WARN_PERCENT = 200.0
+ORBSTACK_CPU_SUSTAINED_RUNS = 3
+ORBSTACK_HUNG_SUSTAINED_RUNS = 2
+# A helper stuck in exit state (ps STAT contains "E") ignores SIGKILL; only a reboot clears it.
+ORBSTACK_STUCK_EXIT_SUSTAINED_RUNS = 2
+ORBSTACK_RESTART_COOLDOWN_S = 3600
+
 # Landline: "Claude silent for Ns, killing process" lines within the window.
 LANDLINE_SILENT_WINDOW_SECONDS = 6 * 3600
 LANDLINE_SILENT_WARN_COUNT = 2
@@ -194,3 +222,6 @@ SERVICE_COMMAND_ALLOWLIST = SERVICE_COMMAND_ALLOWLIST + tuple(
 JOB_COMMAND_MARKERS = JOB_COMMAND_MARKERS + tuple(
     str(marker) for marker in list(_private.get("extra_job_command_markers", []) or [])
 )
+# Off by default: the generic engine never restarts someone's VM unasked. Only a JSON
+# `true` enables it (a string "false" must not).
+ORBSTACK_AUTO_RESTART = _private.get("orbstack_auto_restart", False) is True

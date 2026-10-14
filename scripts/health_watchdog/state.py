@@ -6,6 +6,7 @@ State file (JSON under cache/) holds:
   - streaks:     check_id -> consecutive runs the raw condition held (sustained checks)
   - active:      check_id -> severity currently alerting (drives "recovered" lines)
   - last_alert:  check_id -> {"ts", "severity"} of the last message sent (cooldowns)
+  - orbstack_last_restart_ts: when the watchdog last ran `orb stop` + `orb start`
   - tcc_probe_pid: pid of a TCC probe that survived SIGKILL, so the next run does
                  not start another one while it lives
   - runs:        counter, for the log
@@ -34,6 +35,7 @@ def default_state() -> Dict[str, Any]:
         "last_alert": {},
         "survivors": {},
         "tcc_probe_pid": None,
+        "orbstack_last_restart_ts": None,
         "runs": 0,
     }
 
@@ -103,7 +105,8 @@ def should_send(finding: Finding, last: Optional[Dict[str, Any]], now_ts: float)
     last_severity = Severity(last.get("severity", Severity.WARN.value))
     if finding.severity.rank > last_severity.rank:
         return True
-    return now_ts - float(last.get("ts", 0)) >= cooldown_for(finding.severity)
+    cooldown = finding.cooldown_seconds if finding.cooldown_seconds is not None else cooldown_for(finding.severity)
+    return now_ts - float(last.get("ts", 0)) >= cooldown
 
 
 def decide_alerts(findings: List[Finding], state: Dict[str, Any], now_ts: Optional[float] = None) -> AlertDecision:

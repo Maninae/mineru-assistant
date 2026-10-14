@@ -5,7 +5,7 @@ Python 3.9 compatible (see config.py).
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 
 class Severity(str, Enum):
@@ -43,6 +43,8 @@ class Finding:
     - also_cools: other check_ids whose cooldown this finding starts when sent
       (a kill that reports SIGKILL survivors already covers the standing
       survivor check, so that one must not fire again five minutes later).
+    - cooldown_seconds: overrides the severity's default cooldown (a daily
+      heads-up uses 24 h instead of the WARN default).
     """
 
     check_id: str
@@ -51,3 +53,4 @@ class Finding:
     details: List[str] = field(default_factory=list)
     action_taken: bool = False
     also_cools: List[str] = field(default_factory=list)
+    cooldown_seconds: Optional[int] = None

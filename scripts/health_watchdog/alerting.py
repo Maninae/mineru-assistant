@@ -31,6 +31,7 @@ RECOVERED_TITLES = {
     "disk": "disk space",
     "landline": "Landline silent kills",
     "hung_jobs_survivor": "unkillable hung-job processes (gone now)",
+    "orbstack_stuck_exit": "OrbStack helper stuck in exit (gone now)",
 }
 CRASH_NOTE_MAX_CHARS = 300
 
