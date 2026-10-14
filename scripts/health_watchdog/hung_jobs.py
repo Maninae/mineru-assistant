@@ -38,7 +38,7 @@ from health_watchdog.config import (
     SERVICE_COMMAND_ALLOWLIST,
     SURVIVOR_START_TOLERANCE_SECONDS,
 )
-from health_watchdog.plist_inventory import LaunchdJob, job_script_paths, service_labels
+from health_watchdog.plist_inventory import LaunchdJob, job_script_paths, service_labels, service_script_paths
 from health_watchdog.process_table import ProcessInfo, ancestors, children_by_ppid, descendants, index_by_pid
 from health_watchdog.subprocess_deadline import wait_for_exit
 
@@ -163,8 +163,12 @@ def protected_pids(
     for label, pid in launchctl_pids.items():
         if pid is not None and label in protected_labels:
             roots.add(pid)
+    # Service scripts by path too, so a failed `launchctl list` cannot expose them.
+    service_scripts = service_script_paths(jobs, prefix)
     for row in table:
         if is_service_command(row.command) or row.tty != NO_TTY:
+            roots.add(row.pid)
+        elif any(path in row.command for path in service_scripts):
             roots.add(row.pid)
     roots.add(self_pid)
     roots.update(ancestors(self_pid, by_pid))
@@ -188,7 +192,7 @@ def select_hung_jobs(
     children = children_by_ppid(table)
     protected = protected_pids(table, launchctl_pids, jobs, self_pid, prefix)
     service_label_set = service_labels(jobs, prefix)
-    script_paths = job_script_paths(jobs)
+    script_paths = job_script_paths(jobs, prefix)
     candidates = {}  # type: Dict[int, HungJobCandidate]
     judged = set()  # type: Set[int]
 

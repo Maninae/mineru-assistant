@@ -58,20 +58,35 @@ def load_launchd_jobs(
     return jobs
 
 
-def job_script_paths(jobs: List[LaunchdJob]) -> Set[str]:
-    """Absolute script/program paths that scheduled (non-service) plists launch.
+def script_paths_of(job: LaunchdJob) -> Set[str]:
+    """Absolute script/program paths in one plist's ProgramArguments, interpreters skipped."""
+    paths = set()  # type: Set[str]
+    for argument in job.program_arguments:
+        for token in argument.split():
+            if token.startswith("/") and token.rsplit("/", 1)[-1] not in INTERPRETER_BASENAMES:
+                paths.add(token)
+    return paths
 
-    Interpreters (bash, python) are skipped so the marker is the script itself, e.g.
-    ".../scripts/trigger-morning-brief-claude-code.sh" or ".../scripts/export-journals.py".
-    """
+
+def job_script_paths(jobs: List[LaunchdJob], prefix: str = LAUNCHD_PREFIX) -> Set[str]:
+    """Script paths that scheduled (non-service) plists launch, e.g.
+    ".../scripts/trigger-morning-brief-claude-code.sh" or ".../scripts/export-journals.py"."""
+    protected = service_labels(jobs, prefix)
     paths = set()  # type: Set[str]
     for job in jobs:
-        if job.keepalive:
-            continue
-        for argument in job.program_arguments:
-            for token in argument.split():
-                if token.startswith("/") and token.rsplit("/", 1)[-1] not in INTERPRETER_BASENAMES:
-                    paths.add(token)
+        if job.label not in protected:
+            paths.update(script_paths_of(job))
+    return paths
+
+
+def service_script_paths(jobs: List[LaunchdJob], prefix: str = LAUNCHD_PREFIX) -> Set[str]:
+    """Script paths that service (KeepAlive or allowlisted) plists launch; never killable,
+    even when `launchctl list` is unavailable to map their labels to pids."""
+    protected = service_labels(jobs, prefix)
+    paths = set()  # type: Set[str]
+    for job in jobs:
+        if job.label in protected:
+            paths.update(script_paths_of(job))
     return paths
 
 
