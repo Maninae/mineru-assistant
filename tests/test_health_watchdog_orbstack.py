@@ -8,6 +8,7 @@ from typing import List
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import health_watchdog.__main__ as watchdog_main  # noqa: E402
 from health_watchdog import config  # noqa: E402
 from health_watchdog.evaluate_orbstack import (  # noqa: E402
     CHECK_ORBSTACK,
@@ -23,11 +24,13 @@ from health_watchdog.orbstack_health import (  # noqa: E402
     PROBE_NOT_INSTALLED,
     PROBE_NOT_RUNNING,
     PROBE_OK,
+    PROBE_UNKNOWN,
     OrbstackHealth,
     OrbstackHelperRow,
     RestartReport,
     parse_helper_rows,
     probe_liveness,
+    restart_orbstack,
 )
 from health_watchdog.state import default_state  # noqa: E402
 from health_watchdog.subprocess_deadline import CommandOutcome  # noqa: E402
@@ -166,3 +169,99 @@ def test_restart_findings_report_success_failure_and_dry_run():
     assert good.severity == Severity.WARN and good.title == "Restarted OrbStack: x." and good.action_taken
     bad = restart_finding("x", RestartReport(ok(""), timeout(), PROBE_HUNG, "hung"), dry_run=False)
     assert bad.severity == Severity.CRITICAL and "reboot the Mac" in bad.title and bad.action_taken
+
+
+class SequenceRunner(FakeRunner):
+    """FakeRunner whose canned outcomes may be lists, consumed one per call."""
+
+    def __call__(self, argv, deadline):
+        self.calls.append(list(argv))
+        key = argv[1] if argv[0] == ORB else argv[0]
+        value = self.outcomes[key]
+        return value.pop(0) if isinstance(value, list) else value
+
+
+def test_cpu_only_evidence_with_docker_answering_warns_and_never_restarts():
+    state = default_state()
+    health = OrbstackHealth(PROBE_OK, [helper(cpu=250.0)], detail="docker server 27")
+    for _ in range(config.ORBSTACK_CPU_SUSTAINED_RUNS):
+        verdict = evaluate_orbstack(health, state, NOW, True)
+    assert verdict.restart_reason is None
+    [finding] = verdict.findings
+    assert finding.severity == Severity.WARN and "250% CPU" in finding.title
+    assert any("No auto-restart" in line for line in finding.details)
+    assert any("orb stop && orb start" in line for line in finding.details)
+
+
+def test_unknown_liveness_does_not_count_toward_cpu_streak():
+    state = default_state()
+    for _ in range(5):
+        verdict = evaluate_orbstack(OrbstackHealth(PROBE_UNKNOWN, [helper(cpu=400.0)]), state, NOW, True)
+    assert verdict.findings == [] and state["streaks"]["orbstack_cpu"] == 0
+
+
+def test_stuck_exit_critical_uses_six_hour_cooldown():
+    state = default_state()
+    health = OrbstackHealth(PROBE_NOT_RUNNING, [helper(stat="?Es", pid=3738)])
+    evaluate_orbstack(health, state, NOW, True)
+    [finding] = evaluate_orbstack(health, state, NOW, True).findings
+    assert finding.cooldown_seconds == config.ORBSTACK_STUCK_EXIT_COOLDOWN_S == 6 * 3600
+
+
+def test_restart_runs_stop_then_start_and_retries_probe_until_docker_answers():
+    sleeps = []
+    runner = SequenceRunner({
+        "stop": ok(""), "start": ok(""), "status": ok("Running\n"),
+        DOCKER: [timeout(), timeout(), ok("27.3.1\n")],
+    })
+    report = restart_orbstack(runner, orb_bin=ORB, docker_bin=DOCKER, sleeper=sleeps.append)
+    assert runner.calls[0] == [ORB, "stop"] and runner.calls[1] == [ORB, "start"]
+    assert report.came_back and report.detail_after.endswith("(probe 3)")
+    assert sleeps == [config.ORBSTACK_RESTART_PROBE_INTERVAL_S] * 2
+
+
+def test_restart_gives_up_after_max_probe_attempts():
+    runner = SequenceRunner({"stop": ok(""), "start": ok(""), "status": ok("Running\n"), DOCKER: timeout()})
+    sleeps = []
+    report = restart_orbstack(runner, orb_bin=ORB, docker_bin=DOCKER, sleeper=sleeps.append)
+    assert not report.came_back and report.liveness_after == PROBE_HUNG
+    assert len(sleeps) == config.ORBSTACK_RESTART_PROBE_ATTEMPTS - 1
+
+
+def hung_health():
+    return OrbstackHealth(PROBE_HUNG, [helper(cpu=20.0)], detail="`docker version` did not answer within 30s")
+
+
+def wire_handle_orbstack(monkeypatch, dry_run):
+    """Patch __main__'s collaborators; return the call log."""
+    calls = []
+    monkeypatch.setattr(watchdog_main, "DRY_RUN", dry_run)
+    monkeypatch.setattr(watchdog_main, "ORBSTACK_AUTO_RESTART", True)
+    monkeypatch.setattr(watchdog_main.orbstack_health, "inspect_orbstack", lambda: hung_health())
+    monkeypatch.setattr(watchdog_main.orbstack_health, "restart_orbstack",
+                        lambda: calls.append("restart") or RestartReport(ok(""), ok(""), PROBE_OK, "docker 27"))
+    real_record = watchdog_main.evaluate_orbstack.record_restart
+    monkeypatch.setattr(watchdog_main.evaluate_orbstack, "record_restart",
+                        lambda state, ts: calls.append("record") or real_record(state, ts))
+    monkeypatch.setattr(watchdog_main, "save_state", lambda path, state: calls.append("save"))
+    return calls
+
+
+def test_handle_orbstack_dry_run_never_restarts_or_records(monkeypatch):
+    calls = wire_handle_orbstack(monkeypatch, dry_run=True)
+    state = default_state()
+    findings = []
+    for _ in range(config.ORBSTACK_HUNG_SUSTAINED_RUNS):
+        findings = watchdog_main.handle_orbstack(state, NOW)
+    assert calls == []
+    assert findings[0].title.startswith("Would restart OrbStack") and state.get(LAST_RESTART_KEY) is None
+
+
+def test_handle_orbstack_persists_cooldown_before_restarting(monkeypatch):
+    calls = wire_handle_orbstack(monkeypatch, dry_run=False)
+    state = default_state()
+    findings = []
+    for _ in range(config.ORBSTACK_HUNG_SUSTAINED_RUNS):
+        findings = watchdog_main.handle_orbstack(state, NOW)
+    assert calls == ["record", "save", "restart"]
+    assert findings[0].title.startswith("Restarted OrbStack") and state[LAST_RESTART_KEY] == NOW

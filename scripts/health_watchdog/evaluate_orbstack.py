@@ -6,8 +6,9 @@ Pure like evaluate.py (only `state["streaks"]` and the restart timestamp are tou
 kept in its own module so evaluate.py stays a readable size.
 
 - Wedged = helper CPU at or above the bar for N runs, or the liveness probe hung for
-  N runs. With auto-restart enabled (profile key `orbstack_auto_restart`), off
-  cooldown, and no stuck-exit helper, the caller restarts instead of only warning.
+  N runs. Only the hung streak can trigger a restart (with `orbstack_auto_restart`,
+  off cooldown, no stuck-exit helper): a busy container can legitimately hold the
+  helper above 200% while docker answers, so CPU-only evidence stays a WARN.
 - Stuck exit = a helper with STAT "E" for N runs: CRITICAL, never a restart (orb
   stop/start cannot clear a process the kernel will not let die).
 - Stopped / not installed are deliberate states: no finding.
@@ -22,13 +23,14 @@ from health_watchdog.config import (
     ORBSTACK_HELPER_CPU_WARN_PERCENT,
     ORBSTACK_HUNG_SUSTAINED_RUNS,
     ORBSTACK_RESTART_COOLDOWN_S,
+    ORBSTACK_STUCK_EXIT_COOLDOWN_S,
     ORBSTACK_STUCK_EXIT_SUSTAINED_RUNS,
 )
 from health_watchdog.findings import Finding, Severity
 from health_watchdog.orbstack_health import (
     PROBE_HUNG,
     PROBE_NOT_INSTALLED,
-    PROBE_NOT_RUNNING,
+    PROBE_OK,
     OrbstackHealth,
     RestartReport,
 )
@@ -78,7 +80,8 @@ def evaluate_orbstack(
     """Bump the three streaks and decide what to report or do this run."""
     verdict = OrbstackVerdict()
     installed = health.liveness != PROBE_NOT_INSTALLED
-    running = installed and health.liveness != PROBE_NOT_RUNNING
+    # Only a definite answer counts as running; `unknown` is no evidence either way.
+    running = health.liveness in (PROBE_OK, PROBE_HUNG)
     stuck_streak = bump_streak(state, STREAK_ORBSTACK_STUCK, installed and bool(health.stuck_exiting_pids))
     cpu_streak = bump_streak(
         state, STREAK_ORBSTACK_CPU, running and health.helper_cpu_percent >= ORBSTACK_HELPER_CPU_WARN_PERCENT)
@@ -90,6 +93,7 @@ def evaluate_orbstack(
             ["Stuck helper pid(s) %s for %d checks in a row; no automatic restart, since "
              "`orb stop/start` cannot clear a process stuck in exit." % (
                  ", ".join(str(pid) for pid in health.stuck_exiting_pids), stuck_streak)],
+            cooldown_seconds=ORBSTACK_STUCK_EXIT_COOLDOWN_S,
         ))
         return verdict
 
@@ -102,12 +106,15 @@ def evaluate_orbstack(
         return verdict
     reason = "; ".join(reasons)
 
-    if auto_restart_enabled and restart_allowed(state, now_ts):
+    hung_confirmed = hung_streak >= ORBSTACK_HUNG_SUSTAINED_RUNS
+    if auto_restart_enabled and hung_confirmed and restart_allowed(state, now_ts):
         verdict.restart_reason = reason
         return verdict
 
     details = [helper_stats_line(health)]
-    if auto_restart_enabled:
+    if auto_restart_enabled and not hung_confirmed:
+        details.append("No auto-restart: docker still answers, so high CPU alone may be real work.")
+    elif auto_restart_enabled:
         next_allowed = float(state.get(LAST_RESTART_KEY) or 0) + ORBSTACK_RESTART_COOLDOWN_S
         details.append("Auto-restart already used; next one allowed after %s." % (
             dt.datetime.fromtimestamp(next_allowed).strftime("%H:%M")))

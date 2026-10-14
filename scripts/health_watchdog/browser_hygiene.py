@@ -108,10 +108,19 @@ def format_age(seconds: float) -> str:
     return "%dm" % (seconds // 60)
 
 
-def truncate_url(url: Any, max_chars: int) -> str:
-    """URL cut to `max_chars` with an ellipsis marker."""
-    text = str(url or "")
-    return text if len(text) <= max_chars else text[: max_chars - 3] + "..."
+def compact_tab_url(url: Any, path_tail_chars: int) -> str:
+    """"host…/tail/of/path": host plus the last `path_tail_chars` of the path, no query.
+
+    The end of a path is what tells tabs on one site apart, and dropping the query keeps
+    tokens out of Telegram.
+    """
+    parsed = urlparse(str(url or ""))
+    if not parsed.netloc:
+        return str(url or "")[:path_tail_chars]
+    path = parsed.path if parsed.path != "/" else ""
+    if len(path) > path_tail_chars:
+        path = "…" + path[-path_tail_chars:]
+    return parsed.netloc + path
 
 
 def profile_processes(table: List[ProcessInfo], profile_dir: Path = BROWSER_PROFILE_DIR) -> List[ProcessInfo]:

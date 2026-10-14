@@ -15,6 +15,7 @@ rss 0) ignores SIGKILL and only a reboot clears it, so nothing here acts on that
 """
 
 import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple
@@ -26,6 +27,9 @@ from health_watchdog.config import (
     ORBSTACK_DOCKER_PROBE_DEADLINE_S,
     ORBSTACK_HELPER_COMMAND_MARKER,
     ORBSTACK_RESTART_DEADLINE_S,
+    ORBSTACK_RESTART_PROBE_ATTEMPTS,
+    ORBSTACK_RESTART_PROBE_INTERVAL_S,
+    ORBSTACK_RESTART_VERIFY_BUDGET_S,
     ORBSTACK_STATUS_DEADLINE_S,
     QUICK_COMMAND_DEADLINE_SECONDS,
 )
@@ -204,13 +208,33 @@ class RestartReport:
         return self.liveness_after == PROBE_OK
 
 
-def restart_orbstack(runner: Runner = run_with_deadline) -> RestartReport:
-    """`orb stop`, `orb start` (each bounded), then re-probe. Caller handles DRY_RUN."""
-    orb_bin = first_existing(ORB_BIN_CANDIDATES)
-    docker_bin = first_existing(DOCKER_BIN_CANDIDATES)
+def restart_orbstack(
+    runner: Runner = run_with_deadline,
+    orb_bin: Optional[str] = None,
+    docker_bin: Optional[str] = None,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> RestartReport:
+    """`orb stop`, then `orb start` (each bounded), then re-probe until docker answers.
+
+    dockerd needs time after `orb start`, so a hung/unknown probe is retried up to
+    ORBSTACK_RESTART_PROBE_ATTEMPTS times, ORBSTACK_RESTART_PROBE_INTERVAL_S apart,
+    and no new attempt starts once ORBSTACK_RESTART_VERIFY_BUDGET_S has elapsed.
+    Binaries default to the usual lookup; the caller handles DRY_RUN.
+    """
+    orb_bin = orb_bin or first_existing(ORB_BIN_CANDIDATES)
+    docker_bin = docker_bin or first_existing(DOCKER_BIN_CANDIDATES)
     if orb_bin is None:
         return RestartReport(None, None, PROBE_UNKNOWN, "no orb CLI found")
     stop = runner([orb_bin, "stop"], ORBSTACK_RESTART_DEADLINE_S)
     start = runner([orb_bin, "start"], ORBSTACK_RESTART_DEADLINE_S)
-    liveness, detail = probe_liveness(orb_bin, docker_bin, runner)
-    return RestartReport(stop, start, liveness, detail)
+    verify_started = time.monotonic()
+    liveness, detail = PROBE_UNKNOWN, "not probed"
+    for attempt in range(1, ORBSTACK_RESTART_PROBE_ATTEMPTS + 1):
+        liveness, detail = probe_liveness(orb_bin, docker_bin, runner)
+        if liveness == PROBE_OK:
+            break
+        over_budget = time.monotonic() - verify_started >= ORBSTACK_RESTART_VERIFY_BUDGET_S
+        if attempt == ORBSTACK_RESTART_PROBE_ATTEMPTS or over_budget:
+            break
+        sleeper(ORBSTACK_RESTART_PROBE_INTERVAL_S)
+    return RestartReport(stop, start, liveness, "%s (probe %d)" % (detail, attempt))

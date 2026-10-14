@@ -86,7 +86,7 @@ def paused_until_today_or_later() -> bool:
 
 
 def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
-    """Run every probe and threshold check; take the two permitted actions."""
+    """Run every probe and threshold check; take the four permitted actions."""
     findings = []  # type: List[Finding]
 
     table = read_process_table()
@@ -157,8 +157,10 @@ def handle_orbstack(state: dict, now_ts: float) -> List[Finding]:
     if verdict.restart_reason:
         report = None
         if not DRY_RUN:
-            # Cooldown starts before the attempt, so a crash mid-restart cannot loop it.
+            # Cooldown starts (and is persisted) before the attempt, so a crash or
+            # timeout mid-restart cannot make the next run restart again.
             evaluate_orbstack.record_restart(state, now_ts)
+            save_state(STATE_FILE, state)
             report = orbstack_health.restart_orbstack()
             logger.warning("orbstack restart (%s): came_back=%s after=%s (%s)", verdict.restart_reason,
                            report.came_back, report.liveness_after, report.detail_after)

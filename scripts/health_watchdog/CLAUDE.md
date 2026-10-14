@@ -49,8 +49,8 @@ Dependencies flow downward only: `__main__` -> probes/actions -> `process_table`
 - **Actions bypass cooldowns and never "recover".** A kill, a browser stop, an OrbStack restart, or terminating orphaned profile Chromium is reported every time it happens (`Finding.action_taken`). A kill that reports survivors also starts the `hung_jobs_survivor` cooldown (`Finding.also_cools`), so the first survivor costs one CRITICAL, not two.
 - **Orphaned Chromium is decided from the process table only.** Profile Chromium counts as orphaned when no `/browser/server.py` process exists in `ps` (the 5 s `/health` probe never authorizes a kill, since it can time out under load with the server alive) and only after `BROWSER_ORPHAN_SUSTAINED_RUNS` consecutive runs.
 - **`docker` is never called unless `orb status` says Running.** Any `docker` call auto-launches a stopped OrbStack, so the probe order is `orb status` (bounded; a hang counts as hung) and only then `docker version`. Stopped is a deliberate state (or the app is not set to start at login): no finding, no auto-start. Test: `test_docker_is_never_invoked_when_orb_status_is_stopped`.
-- **OrbStack restarts are opt-in and rationed.** Only with `orbstack_auto_restart: true` in the per-install config, at most once per `ORBSTACK_RESTART_COOLDOWN_S`, and never while a helper is stuck in exit state.
-- **A finding may carry its own cooldown** (`Finding.cooldown_seconds`); the daily tab notices use 24 h instead of the WARN default.
+- **OrbStack restarts are opt-in, rationed, and need a hung probe.** Only with `orbstack_auto_restart: true` in the per-install config, only when `orb status`/`docker version` hung for `ORBSTACK_HUNG_SUSTAINED_RUNS` runs (helper CPU alone stays a WARN: a busy container can hold it above 200% while docker answers), at most once per `ORBSTACK_RESTART_COOLDOWN_S` (persisted before the attempt), and never while a helper is stuck in exit state. After `orb start` the probe is retried (up to 4 times, 15 s apart, 120 s budget) before declaring the VM did not come back.
+- **A finding may carry its own cooldown** (`Finding.cooldown_seconds`); the daily tab notices use 24 h and the stuck-exit CRITICAL 6 h (it repeats until a reboot) instead of the severity defaults.
 - **A crash of the watchdog itself** logs the traceback and sends one short Telegram note (bounded, best effort), exit code 1.
 - **No per-install literals** (names, home paths): the engine's leak-gate tests scan this directory. Derive paths from `MINERU_HOME` / `HOME`.
 - **Pause file** `cache/paused-jobs/health-watchdog.until` uses the same date semantics as `cc-job-lib.sh`, so `bin/pause-job` works unchanged.
@@ -60,7 +60,7 @@ Dependencies flow downward only: `__main__` -> probes/actions -> `process_table`
 | What | Where |
 |------|-------|
 | Rotating log | `$MINERU_HOME/logs/health-watchdog/watchdog.log` (+ launchd `stdout.log` / `stderr.log`) |
-| State (streaks, cooldowns, active checks, stuck probe pid) | `$MINERU_HOME/cache/health-watchdog-state.json` |
+| State (streaks, cooldowns, active checks, stuck probe pid, `orbstack_last_restart_ts`) | `$MINERU_HOME/cache/health-watchdog-state.json` |
 | Plist template | `engine/launchd/LABEL_PREFIX.health-watchdog.plist.template` |
 | Per-install overrides (optional) | `$MINERU_HOME/config/health-watchdog.json`: `offload_volume`, `job_max_age_overrides_seconds`, `extra_service_command_fragments`, `extra_job_command_markers` (private scripts jobs spawn indirectly), `orbstack_auto_restart` (default false); starter at `engine/config/health-watchdog.example.json` |
 
@@ -77,18 +77,18 @@ Tabs opened by interactive sessions may legitimately sit open for hours, overnig
 
 | Condition | Finding | Action | Cooldown |
 |-----------|---------|--------|----------|
-| More than `BROWSER_TABS_HEADSUP` (20) tabs | WARN listing up to 25 tabs as `<age> · <url>` | none | 24 h |
-| Tabs whose `lastActivityAt` is older than `BROWSER_IDLE_TAB_DAYS` (7) | WARN listing `targetId · idle Nd · url`, ending in a reply hint | none (the user replies to close) | 24 h |
+| More than `BROWSER_TABS_HEADSUP` (20) tabs | WARN with the idle count and up to 8 non-idle tabs as `<age> · host…/path-tail` | none | 24 h |
+| Tabs whose `lastActivityAt` is older than `BROWSER_IDLE_TAB_DAYS` (7) | WARN listing up to 8 as `targetId · idle Nd · host…/path-tail`, ending in a reply hint | none (the user replies to close) | 24 h |
 | A renderer at or above 50% CPU for 3 runs | browser stopped | `bin/browser action=stop` | action, always reported |
 | Profile Chromium with no browser-server process, 2 runs | orphans terminated | TERM/KILL | action, always reported |
 
-Tab data comes from `/tabs` (`openedAt`, `lastActivityAt`, `openedBy`, `url`, ISO 8601 with offset). The browser server logs every tab close (`Closed tab ... (explicit close)` / `Tab ... closed by page`) in `logs/browser-server/server.log`, so a disappearing tab can be traced.
+Each notice stays under ~12 lines and a tab appears in only one of them; URLs show the host and the last 40 chars of the path (no query string, which can carry tokens). Tab data comes from `/tabs` (`openedAt`, `lastActivityAt`, `openedBy`, `url`, ISO 8601 with offset). The browser server logs every tab close (`Closed tab ... (explicit close)` / `Tab ... closed by page`) in `logs/browser-server/server.log`, so a disappearing tab can be traced.
 
 ## A wedged OrbStack: what it looks like and what to do
 
 When the host runs short of RAM, macOS swaps out the OrbStack VM's memory and the VM stops making progress.
 
 - **Symptoms:** every `docker` CLI call hangs; the `OrbStack Helper` process sits at 300-400% CPU doing no real work; `~/.orbstack/log/vmgr.log` fills with `rcu_sched detected stalls on CPUs/tasks` (about one every 5 minutes); host swap is near full and load climbs, which starves everything else (tccd included).
-- **Fix:** `orb stop && orb start` restarts the VM and is enough. The watchdog does this itself when `orbstack_auto_restart` is true. A Mac reboot is only needed when the helper is stuck in exit state (ps STAT contains `E`, rss 0, shown as `(OrbStack Helper)`; SIGKILL cannot remove it, and the watchdog raises a CRITICAL saying so) or when the Mac has been up for months.
+- **Fix:** `orb stop && orb start` restarts the VM and is enough. The watchdog does this itself when `orbstack_auto_restart` is true and docker has been hung for 2 runs. A Mac reboot is only needed when the helper is stuck in exit state (ps STAT contains `E`, rss 0, shown as `(OrbStack Helper)`; SIGKILL cannot remove it, and the watchdog raises a CRITICAL saying so) or when the Mac has been up for months.
 - **Prevention:** cap the VM's memory (`orb config set memory_mib <MiB>`) so it can never take a large share of host RAM; a VM that slowly grows to its ceiling over months of uptime is the usual path into this state.
 

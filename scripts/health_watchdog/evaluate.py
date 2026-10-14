@@ -8,17 +8,17 @@ threshold logic lives in evaluate_orbstack.py under the same rules. Nothing in t
 module runs a command, so the whole threshold surface is unit-testable with fakes.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from health_watchdog.browser_hygiene import BrowserStatus, format_age, parse_tab_timestamp, truncate_url
+from health_watchdog.browser_hygiene import BrowserStatus, compact_tab_url, format_age, parse_tab_timestamp
 from health_watchdog.config import (
     BROWSER_IDLE_TAB_DAYS,
     BROWSER_IDLE_TABS_COOLDOWN_S,
     BROWSER_ORPHAN_SUSTAINED_RUNS,
     BROWSER_RENDERER_CPU_PERCENT,
     BROWSER_RENDERER_CPU_SUSTAINED_RUNS,
-    BROWSER_TAB_LIST_LIMIT,
-    BROWSER_TAB_URL_MAX_CHARS,
+    BROWSER_TAB_PATH_TAIL_CHARS,
+    BROWSER_TAB_SUMMARY_LIMIT,
     BROWSER_TABS_HEADSUP,
     BROWSER_TABS_HEADSUP_COOLDOWN_S,
     DISK_FREE_CRITICAL_GB,
@@ -197,42 +197,62 @@ def browser_needs_stop(status: BrowserStatus, state: Dict[str, Any]) -> Optional
     return None
 
 
+def split_idle_tabs(tabs: List[Dict[str, Any]], now_ts: float) -> Tuple[List[Tuple[Dict[str, Any], float]], List[Dict[str, Any]]]:
+    """(idle tabs with their last-activity ts, the rest); idle = quiet BROWSER_IDLE_TAB_DAYS or more."""
+    idle_cutoff = now_ts - BROWSER_IDLE_TAB_DAYS * SECONDS_PER_DAY
+    idle, active = [], []  # type: Tuple[List[Tuple[Dict[str, Any], float]], List[Dict[str, Any]]]
+    for tab in tabs:
+        last_ts = parse_tab_timestamp(tab.get("lastActivityAt"))
+        if last_ts is not None and last_ts < idle_cutoff:
+            idle.append((tab, last_ts))
+        else:
+            active.append(tab)
+    return idle, active
+
+
+def capped_lines(lines: List[str], limit: int = BROWSER_TAB_SUMMARY_LIMIT) -> List[str]:
+    """First `limit` lines plus a "… and N more" line when there are more."""
+    if len(lines) <= limit:
+        return lines
+    return lines[:limit] + ["… and %d more" % (len(lines) - limit)]
+
+
 def evaluate_tab_pile(status: BrowserStatus, now_ts: float) -> Optional[Finding]:
-    """More than BROWSER_TABS_HEADSUP tabs -> a daily WARN listing them. No action."""
+    """More than BROWSER_TABS_HEADSUP tabs -> a daily WARN. No action.
+
+    Idle tabs are counted here but listed only by evaluate_idle_tabs, so no tab is
+    listed twice in one message.
+    """
     if not status.server_running or status.tab_count <= BROWSER_TABS_HEADSUP:
         return None
-    lines = []  # type: List[str]
-    for tab in status.tabs[:BROWSER_TAB_LIST_LIMIT]:
+    idle, active = split_idle_tabs(status.tabs, now_ts)
+    details = []  # type: List[str]
+    if idle:
+        details.append("%d of them idle over a week (listed separately); the others:" % len(idle))
+    tab_lines = []  # type: List[str]
+    for tab in active:
         opened_ts = parse_tab_timestamp(tab.get("openedAt"))
         age = format_age(now_ts - opened_ts) if opened_ts is not None else "?"
-        lines.append("%s · %s" % (age, truncate_url(tab.get("url"), BROWSER_TAB_URL_MAX_CHARS)))
-    if len(status.tabs) > BROWSER_TAB_LIST_LIMIT:
-        lines.append("... and %d more" % (len(status.tabs) - BROWSER_TAB_LIST_LIMIT))
+        tab_lines.append("%s · %s" % (age, compact_tab_url(tab.get("url"), BROWSER_TAB_PATH_TAIL_CHARS)))
+    details.extend(capped_lines(tab_lines))
     return Finding(CHECK_BROWSER_TABS, Severity.WARN, "%d stealth-browser tabs open." % status.tab_count,
-                   lines, cooldown_seconds=BROWSER_TABS_HEADSUP_COOLDOWN_S)
+                   details, cooldown_seconds=BROWSER_TABS_HEADSUP_COOLDOWN_S)
 
 
 def evaluate_idle_tabs(status: BrowserStatus, now_ts: float) -> Optional[Finding]:
     """Tabs with no activity for BROWSER_IDLE_TAB_DAYS -> a daily WARN with their ids. No action."""
     if not status.server_running:
         return None
-    idle_cutoff = now_ts - BROWSER_IDLE_TAB_DAYS * SECONDS_PER_DAY
-    idle = []  # type: List[str]
-    for tab in status.tabs:
-        last_ts = parse_tab_timestamp(tab.get("lastActivityAt"))
-        if last_ts is None or last_ts >= idle_cutoff:
-            continue
-        idle.append("%s · idle %s · %s" % (
-            tab.get("targetId", "?"), format_age(now_ts - last_ts),
-            truncate_url(tab.get("url"), BROWSER_TAB_URL_MAX_CHARS)))
+    idle, _active = split_idle_tabs(status.tabs, now_ts)
     if not idle:
         return None
-    lines = idle[:BROWSER_TAB_LIST_LIMIT]
-    if len(idle) > BROWSER_TAB_LIST_LIMIT:
-        lines.append("... and %d more" % (len(idle) - BROWSER_TAB_LIST_LIMIT))
-    lines.append(IDLE_TABS_REPLY_HINT)
-    return Finding(CHECK_BROWSER_IDLE_TABS, Severity.WARN,
-                   "%d tabs idle for over a week." % len(idle), lines,
+    tab_lines = [
+        "%s · idle %s · %s" % (tab.get("targetId", "?"), format_age(now_ts - last_ts),
+                               compact_tab_url(tab.get("url"), BROWSER_TAB_PATH_TAIL_CHARS))
+        for tab, last_ts in idle
+    ]
+    return Finding(CHECK_BROWSER_IDLE_TABS, Severity.WARN, "%d tabs idle for over a week." % len(idle),
+                   capped_lines(tab_lines) + [IDLE_TABS_REPLY_HINT],
                    cooldown_seconds=BROWSER_IDLE_TABS_COOLDOWN_S)
 
 

@@ -96,11 +96,11 @@ BROWSER_TABS_HEADSUP = 20
 BROWSER_TABS_HEADSUP_COOLDOWN_S = 24 * 3600
 BROWSER_IDLE_TAB_DAYS = 7
 BROWSER_IDLE_TABS_COOLDOWN_S = 24 * 3600
-BROWSER_TAB_LIST_LIMIT = 25
-BROWSER_TAB_URL_MAX_CHARS = 70
+# Tab lines show host + the last N chars of the path (the distinguishing end, no query).
+BROWSER_TAB_PATH_TAIL_CHARS = 40
 BROWSER_RENDERER_CPU_PERCENT = 50.0
 BROWSER_RENDERER_CPU_SUSTAINED_RUNS = 3
-BROWSER_TAB_SUMMARY_LIMIT = 8
+BROWSER_TAB_SUMMARY_LIMIT = 8  # also caps each tab notice's list
 # Profile Chromium counts as orphaned only when NO browser-server process is in the
 # ps table (a slow /health must never authorize a kill), and only after N runs.
 BROWSER_SERVER_COMMAND_MARKER = "/browser/server.py"
@@ -133,6 +133,12 @@ ORBSTACK_HUNG_SUSTAINED_RUNS = 2
 # A helper stuck in exit state (ps STAT contains "E") ignores SIGKILL; only a reboot clears it.
 ORBSTACK_STUCK_EXIT_SUSTAINED_RUNS = 2
 ORBSTACK_RESTART_COOLDOWN_S = 3600
+# The stuck-exit CRITICAL repeats until a reboot, so it re-alerts every 6 h, not every 30 min.
+ORBSTACK_STUCK_EXIT_COOLDOWN_S = 6 * 3600
+# After `orb start`, dockerd needs time: re-probe up to N times, this far apart, within the budget.
+ORBSTACK_RESTART_PROBE_ATTEMPTS = 4
+ORBSTACK_RESTART_PROBE_INTERVAL_S = 15
+ORBSTACK_RESTART_VERIFY_BUDGET_S = 120
 
 # Landline: "Claude silent for Ns, killing process" lines within the window.
 LANDLINE_SILENT_WINDOW_SECONDS = 6 * 3600

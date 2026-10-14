@@ -149,31 +149,58 @@ def tab_status(tabs):
     return BrowserStatus(server_running=True, tab_count=len(tabs), tabs=tabs)
 
 
-def test_tab_pile_headsup_only_above_threshold_lists_age_and_truncated_url():
+NOTICE_MAX_LINES = 12
+
+
+def thirty_tab_fixture():
+    """10 recent tabs plus 20 idle 9 days, all with long same-prefix URLs."""
+    prefix = "https://www.example-store.com/account/orders/history/details/"
+    recent = [tab(i, 2, 0, url=prefix + "recent-order-%02d/summary?token=SECRET" % i) for i in range(10)]
+    idle = [tab(100 + i, 20, 9, url=prefix + "idle-order-%02d/summary" % i) for i in range(20)]
+    return recent + idle
+
+
+def notice_line_count(finding):
+    return 1 + len(finding.details)
+
+
+def test_tab_pile_headsup_only_above_threshold():
     now_ts = TAB_NOW.timestamp()
     at_limit = [tab(i, 1, 0) for i in range(config.BROWSER_TABS_HEADSUP)]
     assert evaluate.evaluate_tab_pile(tab_status(at_limit), now_ts) is None
-    long_url = "https://example.com/" + "x" * 200
-    pile = [tab(i, 2, 0) for i in range(29)] + [tab(99, 0.25, 0, url=long_url)]
-    finding = evaluate.evaluate_tab_pile(tab_status(pile), now_ts)
-    assert finding.check_id == evaluate.CHECK_BROWSER_TABS and finding.severity == Severity.WARN
-    assert finding.title == "30 stealth-browser tabs open." and not finding.action_taken
-    assert finding.cooldown_seconds == config.BROWSER_TABS_HEADSUP_COOLDOWN_S
-    assert finding.details[0] == "2d · https://example.com/page/0"
-    assert len(finding.details) == config.BROWSER_TAB_LIST_LIMIT + 1
-    assert finding.details[-1] == "... and 5 more"
     assert evaluate.evaluate_tab_pile(BrowserStatus(server_running=False, tab_count=50), now_ts) is None
 
 
-def test_idle_tabs_over_a_week_listed_with_ids_and_reply_hint():
+def test_thirty_tabs_give_two_short_notices_without_duplicates():
     now_ts = TAB_NOW.timestamp()
-    tabs = [tab(1, 10, 9), tab(2, 10, 6), tab(3, 30, 8), {"targetId": "tab_bad", "lastActivityAt": "garbage"}]
+    status = tab_status(thirty_tab_fixture())
+    pile = evaluate.evaluate_tab_pile(status, now_ts)
+    idle = evaluate.evaluate_idle_tabs(status, now_ts)
+    assert pile.title == "30 stealth-browser tabs open." and not pile.action_taken
+    assert pile.cooldown_seconds == config.BROWSER_TABS_HEADSUP_COOLDOWN_S
+    assert pile.details[0].startswith("20 of them idle over a week")
+    assert pile.details[-1] == "… and 2 more"
+    assert idle.title == "20 tabs idle for over a week."
+    assert idle.details[-2] == "… and 12 more"
+    assert idle.details[-1] == 'Reply to Mineru: "close idle tabs", or the tab ids to close.'
+    assert not idle.action_taken and idle.cooldown_seconds == config.BROWSER_IDLE_TABS_COOLDOWN_S
+    assert notice_line_count(pile) <= NOTICE_MAX_LINES and notice_line_count(idle) <= NOTICE_MAX_LINES
+    # No tab appears in both notices, and the distinguishing path tail survives.
+    assert not any("idle-order" in line for line in pile.details)
+    assert not any("recent-order" in line for line in idle.details)
+    assert pile.details[1] == "2d · www.example-store.com…/history/details/recent-order-00/summary"
+    assert all("SECRET" not in line for line in pile.details)
+    assert idle.details[0].startswith("tab_0100 · idle 9d · www.example-store.com…")
+    message = format_alert_message([pile, idle], [], dt.datetime(2026, 10, 13, 22, 0))
+    assert len(message.splitlines()) <= 1 + 2 * NOTICE_MAX_LINES
+
+
+def test_idle_tabs_threshold_and_bad_timestamps():
+    now_ts = TAB_NOW.timestamp()
+    tabs = [tab(1, 10, 9), tab(2, 10, 6), {"targetId": "tab_bad", "lastActivityAt": "garbage"}]
     finding = evaluate.evaluate_idle_tabs(tab_status(tabs), now_ts)
-    assert finding.title == "2 tabs idle for over a week."
-    assert finding.details[0] == "tab_0001 · idle 9d · https://example.com/page/1"
-    assert finding.details[1].startswith("tab_0003 · idle 8d")
-    assert finding.details[-1] == 'Reply to Mineru: "close idle tabs", or the tab ids to close.'
-    assert not finding.action_taken and finding.cooldown_seconds == config.BROWSER_IDLE_TABS_COOLDOWN_S
+    assert finding.title == "1 tabs idle for over a week."
+    assert finding.details[0] == "tab_0001 · idle 9d · example.com/page/1"
     assert evaluate.evaluate_idle_tabs(tab_status([tab(1, 10, 6)]), now_ts) is None
 
 
