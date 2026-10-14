@@ -4,19 +4,23 @@ patterns.py - Deterministic injection detection for the prompt firewall.
 
 Two tiers, two jobs:
 
-  Tier A (BLOCK):    unambiguous attack markers. Matching = blocked instantly,
-                     no LLM consulted. Precision must be near-perfect; a Tier A
-                     false positive blocks legitimate content with no appeal.
+  Tier A (BLOCK):    unambiguous attack markers (chat-template tokens).
+                     Matching = blocked instantly in every mode. Precision must
+                     be near-perfect; a Tier A false positive blocks legitimate
+                     content with no appeal.
 
-  Tier B (ESCALATE): broad "instruction-aimed-at-an-AI" vocabulary AND any
-                     substantive free text (>= SUBSTANTIVE_LENGTH chars).
-                     Matching routes the unit to the LLM for a verdict. False
-                     positives here only cost ~1s of LLM time, so recall wins.
-                     The length backstop is deliberate: a vocabulary-free
-                     injection (no "ignore"/"AI"/"forward" keywords) wouldn't
-                     trip a lexical pattern, so anything long enough to carry
-                     one is escalated regardless. Only short, keyword-free
-                     chatter ("see you at 7") skips the LLM entirely.
+  Tier B (ESCALATE): broad "instruction-aimed-at-an-AI" vocabulary, >= 2
+                     invisible characters, AND any substantive free text
+                     (>= SUBSTANTIVE_LENGTH chars). In the default `off` mode
+                     escalation is a no-op (the unit passes); in the opt-in
+                     `gated` mode it routes the unit to the LLM, where recall
+                     wins because a false positive costs one LLM call. The
+                     length backstop catches vocabulary-free injections that no
+                     lexical pattern would trip.
+
+Invisible characters never block: dense zero-width runs are routine tracking
+cruft in newsletter mail. PatternVerdict.invisible_count lets the wrapper
+surface a note when a passed unit carries INVISIBLE_NOTE_THRESHOLD or more.
 
 Patterns scan the FULL text of every unit — unlike the old screener, nothing
 is truncated away before pattern matching.
@@ -35,8 +39,9 @@ TIER_A_PATTERNS: List[Tuple[str, str]] = [
     # NOTHING with any plausible innocent use belongs here — Tier A blocks with
     # no LLM appeal. The canonical "ignore all previous instructions" phrasing
     # is deliberately NOT here: it shows up verbatim in AI/security newsletters
-    # and in the operator's own work chatter, so it escalates to the LLM (Tier B) where
-    # "discussing the attack" is told apart from "executing the attack".
+    # and in the operator's own work chatter. It is Tier B: it passes in the
+    # default mode (the agent's own judgment handles it) and reaches the LLM
+    # only in opt-in gated mode.
     (r"<\|im_start\|>|<\|im_end\|>|<\|endoftext\|>", "Chat template token injection"),
     (r"<\|(system|user|assistant)\|>", "Chat template token injection"),
 ]
@@ -45,9 +50,10 @@ TIER_A_PATTERNS: List[Tuple[str, str]] = [
 # U+200D ZERO WIDTH JOINER is intentionally EXCLUDED — it is structural in
 # emoji (👨‍👩‍👧‍👦 is built from ZWJs), so counting it false-positives on
 # ordinary family/profession emoji. A dense run of the remaining truly-unused
-# code points is steganography.
+# code points may be steganography, but it is far more often newsletter
+# tracking cruft, so it escalates (and is noted on stderr) rather than blocks.
 _INVISIBLE_CHARS = "​‌⁠⁡⁢⁣⁤﻿­"
-_INVISIBLE_BLOCK_THRESHOLD = 8   # this many invisible chars = block
+INVISIBLE_NOTE_THRESHOLD = 8     # this many invisible chars = stderr note
 _INVISIBLE_ESCALATE_THRESHOLD = 2
 
 # ============================================================================
@@ -103,16 +109,19 @@ _TIER_B = [(re.compile(p, re.IGNORECASE | re.DOTALL), d) for p, d in TIER_B_PATT
 class PatternVerdict:
     """Result of pattern scanning one unit of text."""
 
-    __slots__ = ("blocked", "escalate", "reason", "location", "match_spans")
+    __slots__ = ("blocked", "escalate", "reason", "location", "match_spans",
+                 "invisible_count")
 
     def __init__(self, blocked: bool, escalate: bool, reason: Optional[str] = None,
                  location: Optional[str] = None,
-                 match_spans: Optional[List[Tuple[int, int]]] = None):
+                 match_spans: Optional[List[Tuple[int, int]]] = None,
+                 invisible_count: int = 0):
         self.blocked = blocked
         self.escalate = escalate
         self.reason = reason
         self.location = location
         self.match_spans = match_spans or []
+        self.invisible_count = invisible_count
 
 
 def _describe_match(text: str, start: int, matched: str) -> str:
@@ -125,7 +134,7 @@ def scan(text: str) -> PatternVerdict:
     """
     Scan full text. Returns:
       blocked=True                  -> Tier A hit, block without LLM
-      escalate=True                 -> Tier B hit(s), send to LLM
+      escalate=True                 -> Tier B hit(s), send to LLM (gated mode only)
       blocked=False, escalate=False -> clean, pass without LLM
     match_spans (for escalations) lets the screener build focused LLM windows
     around the suspicious regions of very large texts.
@@ -137,10 +146,6 @@ def scan(text: str) -> PatternVerdict:
                                   _describe_match(text, m.start(), m.group()))
 
     invisible_count = sum(text.count(ch) for ch in _INVISIBLE_CHARS)
-    if invisible_count >= _INVISIBLE_BLOCK_THRESHOLD:
-        return PatternVerdict(True, False,
-                              "Hidden invisible-character payload ({} chars)".format(invisible_count),
-                              "throughout text")
 
     spans: List[Tuple[int, int]] = []
     first_reason: Optional[str] = None
@@ -160,7 +165,8 @@ def scan(text: str) -> PatternVerdict:
             first_location = "throughout text"
 
     if spans:
-        return PatternVerdict(False, True, first_reason, first_location, spans)
+        return PatternVerdict(False, True, first_reason, first_location, spans,
+                              invisible_count)
 
     # No pattern fired, but substantial free text still goes to the LLM:
     # vocabulary-free injections live here. Empty spans => screener windows

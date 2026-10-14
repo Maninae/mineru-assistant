@@ -6,7 +6,7 @@ Pipeline:
 1. Run gog command
 2. WRITE commands: pass output through untouched (no external data to screen)
 3. READ commands: clean output (strip metadata) -> screen per-item for prompt
-   injection (patterns + local Ollama, see scripts/firewall/CLAUDE.md).
+   injection (deterministic patterns, see scripts/firewall/CLAUDE.md).
    Flagged items (emails, events) are redacted to stubs; the rest flows
    through. Exit 77 only when nothing was safe.
 

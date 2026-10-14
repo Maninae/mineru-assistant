@@ -2,25 +2,27 @@
 """
 screener.py - Prompt-injection screening engine.
 
-Pipeline per unit of text (one message / email / event):
+Pipeline per unit of text (one message / email / event), default mode:
 
-    cache -> patterns (Tier A block / Tier B escalate) -> LLM (only if escalated)
+    patterns (Tier A block / Tier B pass)
 
-Design points:
-  * Patterns scan the FULL text. Nothing is truncated before scanning.
-  * The LLM is local Ollama over HTTP (not `ollama run`): thinking disabled,
-    JSON-schema-constrained output, temperature 0, model kept warm.
-  * For very large units the LLM screens windows around the pattern matches
-    instead of a blind prefix, so attacks past any size limit are still seen.
-  * LLM verdicts are cached by content hash (sqlite) — repeat reads are free.
-  * Fail-closed: if the LLM is needed and unreachable, the unit is blocked.
-    Pattern-clean units never need the LLM, so an Ollama outage no longer
-    blocks ordinary reads.
+Only chat-template tokens block by default. The local-LLM stage is retired
+from the default path (frontier agents judge untrusted content themselves, and
+the 8B screener mostly redacted long newsletters while pinning ~6 GB of RAM),
+but stays intact and opt-in via MINERU_FIREWALL_MODE:
 
-Modes (env MINERU_FIREWALL_MODE):
-  gated  (default) LLM only for Tier-B escalations
+  off    (default) patterns only; Tier-B escalations pass without LLM review
+  gated            LLM (local Ollama) only for Tier-B escalations
   always           LLM for every non-trivial unit, even pattern-clean ones
-  off              patterns only; Tier-B matches pass without LLM review
+
+LLM-path design points (gated/always only):
+  * Ollama over HTTP: thinking disabled, JSON-schema output, temperature 0.
+  * Very large units are screened via windows covering the whole text.
+  * Verdicts are cached by content hash (sqlite); repeat reads are free.
+  * Fail-closed: an escalated unit is blocked if the LLM is unreachable.
+
+Patterns always scan the FULL text. A passed unit carrying a dense invisible
+character run gets a ScreenResult.note the wrapper prints on stderr.
 
 Exit codes (CLI): 0 safe, 77 blocked, 78 screening error.
 
@@ -49,7 +51,7 @@ PROMPT_FILE = SCRIPT_DIR / "prompts" / "screen.md"
 
 OLLAMA_URL = os.environ.get("MINERU_FIREWALL_OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("MINERU_FIREWALL_MODEL", "qwen3:8b")
-MODE = os.environ.get("MINERU_FIREWALL_MODE", "gated")  # gated | always | off
+MODE = os.environ.get("MINERU_FIREWALL_MODE", "off")  # off | gated | always
 
 LLM_TIMEOUT = 60          # per-call; first call may include model cold-load
 LLM_RETRIES = 1           # retry once on connection error / timeout
@@ -100,6 +102,7 @@ class ScreenResult(NamedTuple):
     location: Optional[str] = None
     severity: Optional[str] = None
     detector: Optional[str] = None
+    note: Optional[str] = None  # non-blocking observation for the wrapper's stderr
 
     def to_dict(self) -> dict:
         return {k: v for k, v in self._asdict().items() if v is not None}
@@ -359,7 +362,8 @@ def screen_units(texts: List[str]) -> List[ScreenResult]:
                                       location=verdict.location,
                                       severity="high", detector="pattern")
         elif MODE == "off":
-            results[i] = ScreenResult(safe=True, detector="pattern")
+            results[i] = ScreenResult(safe=True, detector="pattern",
+                                      note=_invisible_note(verdict.invisible_count))
         elif verdict.escalate:
             needs_llm.append((i, verdict.match_spans))
         elif MODE == "always" and len(text.strip()) >= MIN_LLM_LENGTH:
@@ -394,8 +398,15 @@ def screen_units(texts: List[str]) -> List[ScreenResult]:
     final = [r if r is not None else ScreenResult(safe=True, detector="pattern")
              for r in results]
     _log_event(len(texts), len(needs_llm), sum(1 for r in final if not r.safe),
-               time.time() - started)
+               time.time() - started, sum(1 for r in final if r.note))
     return final
+
+
+def _invisible_note(invisible_count: int) -> Optional[str]:
+    """Note for a passed unit with a dense invisible-character run, else None."""
+    if invisible_count < patterns.INVISIBLE_NOTE_THRESHOLD:
+        return None
+    return "{} invisible characters".format(invisible_count)
 
 
 def screen_text(text: str) -> ScreenResult:
@@ -403,7 +414,8 @@ def screen_text(text: str) -> ScreenResult:
     return screen_units([text])[0]
 
 
-def _log_event(units: int, escalated: int, blocked: int, elapsed: float) -> None:
+def _log_event(units: int, escalated: int, blocked: int, elapsed: float,
+               noted: int = 0) -> None:
     """
     Append a telemetry line for tuning. Counts only — never message content.
     Never breaks the pipeline.
@@ -415,7 +427,7 @@ def _log_event(units: int, escalated: int, blocked: int, elapsed: float) -> None
             f.write(json.dumps({
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "mode": MODE, "units": units, "escalated": escalated,
-                "blocked": blocked, "ms": int(elapsed * 1000),
+                "blocked": blocked, "noted": noted, "ms": int(elapsed * 1000),
             }) + "\n")
         os.chmod(str(LOG_PATH), 0o600)
     except Exception:

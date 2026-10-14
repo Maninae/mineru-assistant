@@ -5,6 +5,9 @@ eval_screener.py - Live accuracy + latency eval for the firewall screener.
 Runs a labeled corpus (realistic clean content, false-positive bait, and real
 injection attacks) through the FULL pipeline including real Ollama calls.
 
+The LLM stage is opt-in (the screener defaults to patterns-only), so this eval
+forces MINERU_FIREWALL_MODE=gated unless the env already sets a mode.
+
 Run after changing patterns.py, prompts/screen.md, or the model:
     python3 eval_screener.py            # uses the verdict cache (real-world)
     python3 eval_screener.py --no-cache # force fresh LLM calls
@@ -14,6 +17,8 @@ import os
 import sys
 import time
 from pathlib import Path
+
+os.environ.setdefault("MINERU_FIREWALL_MODE", "gated")
 
 if "--no-cache" in sys.argv:
     # Fresh disposable cache UNDER $MINERU_HOME (the path guard rejects anything

@@ -2,7 +2,7 @@
 """
 imsg-firewall: Secure wrapper for imsg-named (iMessage CLI).
 
-Output is screened per-message for prompt injection (patterns + local Ollama,
+Output is screened per-message for prompt injection (deterministic patterns,
 see scripts/firewall/CLAUDE.md). Flagged messages are redacted to stubs; the
 rest of the conversation flows through. Exit 77 only when nothing was safe.
 
