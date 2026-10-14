@@ -23,8 +23,11 @@ Read all consolidated daily memory files from the past 7 days:
 ```bash
 for i in 7 6 5 4 3 2 1; do
   d=$(date -v-${i}d '+%Y-%m-%d')
-  if ls memory/daily/${d}*.md >/dev/null 2>&1; then
+  if [ -f memory/daily/${d}.md ]; then
     ls memory/daily/${d}*.md
+  elif ls memory/daily/${d}_*.md >/dev/null 2>&1; then
+    echo "UNCONSOLIDATED: $d (only raw files; read them directly and note the gap in the report)"
+    ls memory/daily/${d}_*.md
   else
     echo "MISSING: $d (no daily consolidation — note this gap in the report)"
   fi

@@ -36,7 +36,7 @@ mcp__claude_ai_Google_Calendar__list_events
   calendarId: "{{PERSONAL_CALENDAR_ID}}"
   startTime:  "YYYY-MM-DDT00:00:00"   # 14 days ago
   endTime:    "YYYY-MM-DDT00:00:00"   # 14 days ahead
-  timeZone:   "America/Los_Angeles"
+  timeZone:   "{{USER_TIMEZONE}}"
   orderBy:    "startTime"
   pageSize:   100
 # e.g., if today is March 26: startTime "2026-03-12T00:00:00", endTime "2026-04-09T00:00:00"
@@ -117,7 +117,7 @@ Before finalizing your brief, review everything you've gathered:
 
 ## Output Format
 
-{{USER_NAME}} is a new dad and busy. This brief should be scannable in 30 seconds. Every word must earn its place — but personality counts as earning its place. Be warm and concise, not clinical.
+{{USER_NAME}} is busy. This brief should be scannable in 30 seconds. Every word must earn its place — but personality counts as earning its place. Be warm and concise, not clinical.
 
 ### Structure
 
@@ -162,7 +162,7 @@ After delivering the brief, read `creations/README.md` and see what you think. N
 - **Calendar:** Always use {{USER_NAME}}'s personal calendar (`{{PERSONAL_CALENDAR_ID}}`)
 - **Never** use the `primary` (Gmail account) calendar
 - **Location:** {{USER_LOCATION}}
-- **Timezone:** America/Los_Angeles (PST/PDT)
+- **Timezone:** {{USER_TIMEZONE}}
 
 ---
 

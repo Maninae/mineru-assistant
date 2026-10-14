@@ -79,7 +79,7 @@ That file is the source of truth for preserve/remove rules, the cardinal "distil
 **Read from:** `journal_exports/`
 
 1. Check the manifest: `journal_exports/_index.json` — lists all exported entries with names and dates.
-2. Find yesterday's entry by name (journal entries are typically titled by date, e.g., "March 27, 2026").
+2. Find yesterday's entry by its `date` field (a UTC timestamp; convert to local time before comparing). Do not match on the title: titles are free-form (e.g. "Sept 22nd - ...") and often lag the write date.
 3. Read the `.txt` file: `journal_exports/<entry-title>.txt`
 
 ```bash
