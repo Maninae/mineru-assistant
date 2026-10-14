@@ -35,8 +35,9 @@ LANDLINE_DAEMON_LOG = MINERU_HOME / "logs" / "telegram-daemon" / "daemon.log"
 # TCC probe: a read-only sqlite query against Messages' chat.db. Under launchd the
 # Full Disk Access grant follows the job's MAIN program: with /bin/bash as the
 # program every Apple-signed child (sqlite3, /usr/bin/python3) can read chat.db;
-# with /usr/bin/python3 as the program all of them are denied. Hence the plist
-# runs `bash -c "python3 -m health_watchdog"`. Homebrew python and imsg fail either way.
+# with /usr/bin/python3 as the program all of them are denied. Hence the plist runs
+# `/bin/bash run-health-watchdog.sh` like every other job. Homebrew python and imsg
+# fail either way.
 TCC_PROBE_DB = Path.home() / "Library" / "Messages" / "chat.db"
 TCC_PROBE_SQLITE_BIN = "/usr/bin/sqlite3"
 TCC_PROBE_QUERY = "select count(*) from chat;"
@@ -61,16 +62,28 @@ TCCD_CPU_WARN_PERCENT = 50.0
 TCCD_CPU_SUSTAINED_RUNS = 3
 
 # Memory: swap used fraction (sysctl vm.swapusage) and memory_pressure free %.
-# macOS grows swap on demand, so used/total sits near 70% in normal operation.
+# macOS grows swap on demand in 1 GB steps, so used/total sits near 70% in normal
+# operation and flaps across any single line; hence a sustained streak plus a
+# CLEAR bar well below the WARN bar (hysteresis) before the check is considered over.
 SWAP_USED_WARN_FRACTION = 0.80
+SWAP_USED_CLEAR_FRACTION = 0.70
 SWAP_USED_CRITICAL_FRACTION = 0.90
 MEMORY_FREE_WARN_PERCENT = 15
+MEMORY_FREE_CLEAR_PERCENT = 25
 MEMORY_FREE_CRITICAL_PERCENT = 5
+MEMORY_SUSTAINED_RUNS = 2
 
-# Load: 5-minute average divided by core count, sustained across runs.
+# Load: 5-minute average divided by core count, sustained across runs, with the
+# same hysteresis (stays "bad" until it drops under the CLEAR bar).
 LOAD_PER_CORE_WARN = 1.0
+LOAD_PER_CORE_CLEAR = 0.8
 LOAD_PER_CORE_CRITICAL = 1.5
 LOAD_SUSTAINED_RUNS = 3
+
+# A hung-job pid that survived SIGKILL is remembered (pid + start time, so a reused
+# pid is not mistaken for it) and not re-signalled; its alert follows the CRITICAL
+# cooldown instead of firing every run.
+SURVIVOR_START_TOLERANCE_SECONDS = 120
 
 # Hung jobs: normal CC jobs finish in 1-25 min and the largest plist TimeOut is 2 h.
 MAX_JOB_AGE_SECONDS = 3 * 3600
@@ -117,11 +130,15 @@ SERVICE_COMMAND_ALLOWLIST = (
     "Chromium",
     "cloakbrowser",
 )
-# Command-line fragments that mark a process as part of a scheduled job.
+# Command-line fragments that mark an ORPHAN as part of a scheduled job: the engine's
+# firewall helpers that jobs spawn. The scheduled scripts themselves are derived at
+# runtime from the plists' ProgramArguments (plist_inventory.job_script_paths), so a
+# hand-run or nohup'd workspace script is never mistaken for a job.
 JOB_COMMAND_MARKERS = (
-    str(MINERU_HOME / "scripts") + "/",
-    "imsg-firewall",
-    "imsg-named",
+    "/bin/imsg-firewall",
+    "/bin/imsg-named",
+    "/bin/gog-firewall",
+    "/scripts/boundary_validator.py",
 )
 # run_cc_job's prompt is "Read recurring/<job>.md and execute the job.", so a
 # headless `claude --print` carrying this marker is a scheduled CC job.
@@ -164,4 +181,9 @@ JOB_MAX_AGE_OVERRIDES_SECONDS.update({
 })
 SERVICE_COMMAND_ALLOWLIST = SERVICE_COMMAND_ALLOWLIST + tuple(
     str(fragment) for fragment in list(_private.get("extra_service_command_fragments", []) or [])
+)
+# Private scripts that scheduled jobs spawn indirectly (so they are not in any plist's
+# ProgramArguments) can be named here to make their orphans killable too.
+JOB_COMMAND_MARKERS = JOB_COMMAND_MARKERS + tuple(
+    str(marker) for marker in list(_private.get("extra_job_command_markers", []) or [])
 )

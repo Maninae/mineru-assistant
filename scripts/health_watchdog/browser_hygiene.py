@@ -81,10 +81,26 @@ def summarize_tabs(tabs: List[Dict[str, Any]], limit: int = BROWSER_TAB_SUMMARY_
     return lines
 
 
+def profile_processes(table: List[ProcessInfo], profile_dir: Path = BROWSER_PROFILE_DIR) -> List[ProcessInfo]:
+    """Every Chromium process (browser, renderers, helpers) running on the stealth profile."""
+    marker = str(profile_dir)
+    return [row for row in table if marker in row.command]
+
+
 def renderer_processes(table: List[ProcessInfo], profile_dir: Path = BROWSER_PROFILE_DIR) -> List[ProcessInfo]:
     """Chromium renderer processes belonging to the stealth profile."""
-    marker = str(profile_dir)
-    return [row for row in table if RENDERER_MARKER in row.command and marker in row.command]
+    return [row for row in profile_processes(table, profile_dir) if RENDERER_MARKER in row.command]
+
+
+def orphaned_profile_processes(status: "BrowserStatus", table: List[ProcessInfo]) -> List[ProcessInfo]:
+    """Profile Chromium processes left behind while the browser server is down.
+
+    With the server gone nothing will ever close them, so they are the leak the
+    incident showed (renderers burning CPU for days); the caller may terminate them.
+    """
+    if status.server_running:
+        return []
+    return profile_processes(table)
 
 
 def inspect_browser(table: List[ProcessInfo], port: int = BROWSER_PORT) -> BrowserStatus:

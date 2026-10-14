@@ -23,7 +23,7 @@ A tree is NEVER a candidate when its root, or any ancestor, is
 import os
 import signal
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from health_watchdog.config import (
     CC_BINARY_NAMES,
@@ -36,8 +36,9 @@ from health_watchdog.config import (
     MAX_JOB_AGE_SECONDS,
     NO_TTY,
     SERVICE_COMMAND_ALLOWLIST,
+    SURVIVOR_START_TOLERANCE_SECONDS,
 )
-from health_watchdog.plist_inventory import LaunchdJob, service_labels
+from health_watchdog.plist_inventory import LaunchdJob, job_script_paths, service_labels
 from health_watchdog.process_table import ProcessInfo, ancestors, children_by_ppid, descendants, index_by_pid
 from health_watchdog.subprocess_deadline import wait_for_exit
 
@@ -70,12 +71,45 @@ class HungJobCandidate:
 
 @dataclass
 class KillReport:
-    """What the killer did. survivors are pids alive after SIGKILL + grace."""
+    """What the killer did.
+
+    - killed: pids gone after the TERM/KILL sequence.
+    - survivors: pids signalled this run that are still alive after SIGKILL + grace.
+    - known_survivors: pids skipped because an earlier run already reported them.
+    """
 
     candidates: List[HungJobCandidate]
     dry_run: bool
     killed: List[int] = field(default_factory=list)
     survivors: List[int] = field(default_factory=list)
+    known_survivors: List[int] = field(default_factory=list)
+
+    @property
+    def signalled_anything(self) -> bool:
+        """False when every pid in every tree was a known survivor."""
+        return bool(self.killed or self.survivors) or (
+            self.dry_run and any(p not in self.known_survivors for c in self.candidates for p in c.all_pids))
+
+
+def process_start_ts(row: ProcessInfo, now_ts: float) -> float:
+    """Approximate start time from ps etime; the pid-reuse guard for survivor records."""
+    return now_ts - row.etime_seconds
+
+
+def still_same_process(pid: int, recorded_start_ts: float, by_pid: Dict[int, ProcessInfo], now_ts: float) -> bool:
+    """True if `pid` is alive and started when the record says (within tolerance)."""
+    row = by_pid.get(pid)
+    if row is None:
+        return False
+    return abs(process_start_ts(row, now_ts) - recorded_start_ts) <= SURVIVOR_START_TOLERANCE_SECONDS
+
+
+def prune_survivor_records(records: Dict[str, float], by_pid: Dict[int, ProcessInfo], now_ts: float) -> Dict[str, float]:
+    """Keep only survivor records whose pid is still the same live process."""
+    return {
+        pid_text: start_ts for pid_text, start_ts in records.items()
+        if pid_text.isdigit() and still_same_process(int(pid_text), float(start_ts), by_pid, now_ts)
+    }
 
 
 def is_service_command(command: str) -> bool:
@@ -93,8 +127,15 @@ def is_cc_job_command(command: str) -> bool:
     return CC_JOB_PROMPT_MARKER in command
 
 
-def is_job_command(command: str) -> bool:
-    """Command line that belongs to a scheduled job (script path, imsg firewall, CC job)."""
+def is_job_command(command: str, script_paths: Iterable[str] = ()) -> bool:
+    """Command line that belongs to a scheduled job.
+
+    Matches a script a scheduled plist launches, one of the engine's firewall helpers
+    jobs spawn, or a headless CC job. A hand-run or nohup'd workspace script matches
+    none of these and is left alone.
+    """
+    if any(path in command for path in script_paths):
+        return True
     return any(marker in command for marker in JOB_COMMAND_MARKERS) or is_cc_job_command(command)
 
 
@@ -147,6 +188,7 @@ def select_hung_jobs(
     children = children_by_ppid(table)
     protected = protected_pids(table, launchctl_pids, jobs, self_pid, prefix)
     service_label_set = service_labels(jobs, prefix)
+    script_paths = job_script_paths(jobs)
     candidates = {}  # type: Dict[int, HungJobCandidate]
     judged = set()  # type: Set[int]
 
@@ -178,7 +220,7 @@ def select_hung_jobs(
     for row in table:
         if row.pid in covered or row.ppid != LAUNCHD_PID or row.tty != NO_TTY:
             continue
-        if not is_job_command(row.command):
+        if not is_job_command(row.command, script_paths):
             continue
         consider(row, None)
 
@@ -194,19 +236,28 @@ def send_signal(pids: List[int], sig: int) -> None:
             continue
 
 
-def kill_job_trees(candidates: List[HungJobCandidate], dry_run: bool) -> KillReport:
-    """TERM every pid in every tree, wait, KILL the rest, wait, report survivors."""
-    report = KillReport(candidates=candidates, dry_run=dry_run)
-    all_pids = [pid for candidate in candidates for pid in candidate.all_pids]
-    if dry_run or not all_pids:
-        return report
-
-    send_signal(all_pids, signal.SIGTERM)
-    remaining = wait_for_exit(all_pids, KILL_TERM_GRACE_SECONDS)
+def terminate_pids(pids: List[int]) -> Tuple[List[int], List[int]]:
+    """TERM, wait, KILL the rest, wait; return (killed, survivors)."""
+    if not pids:
+        return [], []
+    send_signal(pids, signal.SIGTERM)
+    remaining = wait_for_exit(pids, KILL_TERM_GRACE_SECONDS)
     if remaining:
         send_signal(remaining, signal.SIGKILL)
         remaining = wait_for_exit(remaining, KILL_KILL_GRACE_SECONDS)
+    return [pid for pid in pids if pid not in remaining], remaining
 
-    report.survivors = remaining
-    report.killed = [pid for pid in all_pids if pid not in remaining]
+
+def kill_job_trees(
+    candidates: List[HungJobCandidate], dry_run: bool, skip_pids: Iterable[int] = ()
+) -> KillReport:
+    """Kill every tree except pids already reported as SIGKILL survivors."""
+    skip = set(skip_pids)
+    report = KillReport(candidates=candidates, dry_run=dry_run)
+    all_pids = [pid for candidate in candidates for pid in candidate.all_pids]
+    report.known_survivors = [pid for pid in all_pids if pid in skip]
+    targets = [pid for pid in all_pids if pid not in skip]
+    if dry_run or not targets:
+        return report
+    report.killed, report.survivors = terminate_pids(targets)
     return report

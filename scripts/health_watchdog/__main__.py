@@ -35,6 +35,7 @@ from health_watchdog.process_table import (
     current_user,
     format_top_cpu,
     format_top_rss,
+    index_by_pid,
     outcome_summary,
     read_launchctl_list,
     read_process_table,
@@ -97,7 +98,7 @@ def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
     for finding in (
         evaluate.evaluate_tcc(tcc),
         evaluate.evaluate_tccd_cpu(snapshot, state),
-        evaluate.evaluate_memory(snapshot, top_rss),
+        evaluate.evaluate_memory(snapshot, state, top_rss),
         evaluate.evaluate_load(snapshot, state, top_cpu),
         evaluate.evaluate_disk(snapshot),
         evaluate.evaluate_landline(landline_health.recent_silent_kill_count(now), snapshot),
@@ -106,15 +107,7 @@ def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
             findings.append(finding)
 
     if table:
-        candidates = hung_jobs.select_hung_jobs(table, launchctl_pids, jobs, os.getpid(), current_user())
-        if candidates:
-            for candidate in candidates:
-                logger.warning("hung job: %s root pid %d age %ds pids %s",
-                               candidate.name, candidate.root_pid, candidate.age_seconds, candidate.all_pids)
-            report = hung_jobs.kill_job_trees(candidates, DRY_RUN)
-            logger.warning("kill report: dry_run=%s killed=%s survivors=%s",
-                           report.dry_run, report.killed, report.survivors)
-            findings.append(evaluate.hung_jobs_finding(report))
+        findings.extend(handle_hung_jobs(table, launchctl_pids, jobs, state, now.timestamp()))
 
     browser = browser_hygiene.inspect_browser(table)
     logger.info("browser: running=%s tabs=%d renderers=%d hottest=%.0f%%",
@@ -125,7 +118,43 @@ def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
         stop_summary = "dry run, not stopped" if outcome is None else outcome_summary(outcome)
         logger.warning("browser stop (%s): %s", stop_reason, stop_summary)
         findings.append(evaluate.browser_finding(browser, stop_reason, stop_summary))
+    orphans = browser_hygiene.orphaned_profile_processes(browser, table)
+    if orphans:
+        orphan_pids = [row.pid for row in orphans]
+        killed, survivors = ([], []) if DRY_RUN else hung_jobs.terminate_pids(orphan_pids)
+        logger.warning("orphaned browser processes %s: dry_run=%s killed=%s survivors=%s",
+                       orphan_pids, DRY_RUN, killed, survivors)
+        findings.append(evaluate.orphaned_browser_finding(len(orphans), killed, survivors, DRY_RUN))
 
+    return findings
+
+
+def handle_hung_jobs(table, launchctl_pids, jobs, state: dict, now_ts: float) -> List[Finding]:
+    """Select, kill (skipping already-reported SIGKILL survivors), remember new survivors."""
+    findings = []  # type: List[Finding]
+    by_pid = index_by_pid(table)
+    survivors = hung_jobs.prune_survivor_records(dict(state.get("survivors", {})), by_pid, now_ts)
+    known_pids = [int(pid_text) for pid_text in survivors]
+
+    candidates = hung_jobs.select_hung_jobs(table, launchctl_pids, jobs, os.getpid(), current_user())
+    if candidates:
+        for candidate in candidates:
+            logger.warning("hung job: %s root pid %d age %ds pids %s",
+                           candidate.name, candidate.root_pid, candidate.age_seconds, candidate.all_pids)
+        report = hung_jobs.kill_job_trees(candidates, DRY_RUN, skip_pids=known_pids)
+        logger.warning("kill report: dry_run=%s killed=%s survivors=%s known_survivors=%s",
+                       report.dry_run, report.killed, report.survivors, report.known_survivors)
+        for pid in report.survivors:
+            if pid in by_pid:
+                survivors[str(pid)] = hung_jobs.process_start_ts(by_pid[pid], now_ts)
+        finding = evaluate.hung_jobs_finding(report)
+        if finding is not None:
+            findings.append(finding)
+
+    state["survivors"] = survivors
+    standing = evaluate.survivors_finding(known_pids)
+    if standing is not None:
+        findings.append(standing)
     return findings
 
 
@@ -185,7 +214,14 @@ def main() -> int:
     try:
         return run_once()
     except Exception:  # noqa: BLE001 - the watchdog must log its own crash, not die silently
-        logger.error("watchdog crashed:\n%s", traceback.format_exc())
+        error_text = traceback.format_exc()
+        logger.error("watchdog crashed:\n%s", error_text)
+        if not DRY_RUN:
+            try:
+                outcome = alerting.send_telegram(alerting.format_crash_message(error_text, dt.datetime.now()))
+                logger.info("crash alert: %s", outcome_summary(outcome))
+            except Exception:  # noqa: BLE001 - best effort; the log already has the crash
+                logger.error("crash alert failed:\n%s", traceback.format_exc())
         return 1
 
 

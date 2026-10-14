@@ -29,8 +29,10 @@ def default_state() -> Dict[str, Any]:
     return {
         "version": STATE_VERSION,
         "streaks": {},
+        "flags": {},
         "active": {},
         "last_alert": {},
+        "survivors": {},
         "tcc_probe_pid": None,
         "runs": 0,
     }
@@ -64,6 +66,20 @@ def bump_streak(state: Dict[str, Any], check_id: str, condition_holds: bool) -> 
     streaks = state.setdefault("streaks", {})
     streaks[check_id] = streaks.get(check_id, 0) + 1 if condition_holds else 0
     return streaks[check_id]
+
+
+def hysteresis_flag(state: Dict[str, Any], key: str, is_bad: bool, is_clear: bool) -> bool:
+    """Latch: set when `is_bad`, released only when `is_clear`, otherwise unchanged.
+
+    Metrics such as swap percentage flap across any single line, so a check turns on
+    at the WARN bar but turns off only below a lower CLEAR bar.
+    """
+    flags = state.setdefault("flags", {})
+    if is_bad:
+        flags[key] = True
+    elif is_clear:
+        flags[key] = False
+    return bool(flags.get(key, False))
 
 
 def cooldown_for(severity: Severity) -> int:
@@ -107,10 +123,17 @@ def decide_alerts(findings: List[Finding], state: Dict[str, Any], now_ts: Option
         else:
             decision.suppressed.append(finding)
 
+    # A check that clears gets a "recovered" line only if it had reached CRITICAL;
+    # WARN-level flapping stays silent. The cooldown record is kept across recovery
+    # so a re-occurrence inside the window does not re-alert.
     for check_id in previously_active:
-        if check_id not in currently_active:
+        record = last_alert.get(check_id)
+        if check_id in currently_active or record is None:
+            continue
+        if record.get("severity") == Severity.CRITICAL.value and not record.get("recovered"):
             decision.recovered.append(check_id)
-            last_alert.pop(check_id, None)
+            # One recovered line per sent alert; the record (and its cooldown) stays.
+            record["recovered"] = True
 
     state["active"] = currently_active
     return decision

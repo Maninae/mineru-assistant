@@ -30,7 +30,9 @@ RECOVERED_TITLES = {
     "load": "load average",
     "disk": "disk space",
     "landline": "Landline silent kills",
+    "hung_jobs_survivor": "unkillable hung-job processes (gone now)",
 }
+CRASH_NOTE_MAX_CHARS = 300
 
 
 def short_hostname() -> str:
@@ -48,6 +50,13 @@ def format_alert_message(to_send: List[Finding], recovered: List[str], now: dt.d
     for check_id in recovered:
         lines.append("%s recovered: %s" % (RECOVERED_ICON, RECOVERED_TITLES.get(check_id, check_id)))
     return "\n".join(lines)
+
+
+def format_crash_message(error_text: str, now: dt.datetime) -> str:
+    """Short note sent when the watchdog itself crashed (details are in its log)."""
+    last_line = error_text.strip().splitlines()[-1] if error_text.strip() else "unknown error"
+    return "%s health-watchdog on %s CRASHED at %s: %s. See logs/health-watchdog/watchdog.log." % (
+        HEADER_ICON, short_hostname(), now.strftime("%H:%M"), last_line[:CRASH_NOTE_MAX_CHARS])
 
 
 def send_telegram(message: str) -> CommandOutcome:

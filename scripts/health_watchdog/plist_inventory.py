@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Set
 
 from health_watchdog.config import LAUNCHD_PREFIX, LAUNCH_AGENTS_DIR, SERVICE_LABEL_ALLOWLIST
+from health_watchdog.process_table import INTERPRETER_BASENAMES
 
 
 @dataclass
@@ -55,6 +56,23 @@ def load_launchd_jobs(
         except (OSError, plistlib.InvalidFileException, ValueError):
             continue
     return jobs
+
+
+def job_script_paths(jobs: List[LaunchdJob]) -> Set[str]:
+    """Absolute script/program paths that scheduled (non-service) plists launch.
+
+    Interpreters (bash, python) are skipped so the marker is the script itself, e.g.
+    ".../scripts/trigger-morning-brief-claude-code.sh" or ".../scripts/export-journals.py".
+    """
+    paths = set()  # type: Set[str]
+    for job in jobs:
+        if job.keepalive:
+            continue
+        for argument in job.program_arguments:
+            for token in argument.split():
+                if token.startswith("/") and token.rsplit("/", 1)[-1] not in INTERPRETER_BASENAMES:
+                    paths.add(token)
+    return paths
 
 
 def service_labels(jobs: List[LaunchdJob], prefix: str = LAUNCHD_PREFIX) -> Set[str]:

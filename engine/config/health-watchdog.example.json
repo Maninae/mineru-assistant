@@ -4,5 +4,6 @@
   "job_max_age_overrides_seconds": {
     "weekly-deep-consolidation": 14400
   },
-  "extra_service_command_fragments": []
+  "extra_service_command_fragments": [],
+  "extra_job_command_markers": ["/scripts/my-private-job-helper.py"]
 }

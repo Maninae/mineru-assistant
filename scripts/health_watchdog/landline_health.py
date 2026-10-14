@@ -14,7 +14,11 @@ from typing import Optional
 
 from health_watchdog.config import LANDLINE_DAEMON_LOG, LANDLINE_LOG_TAIL_BYTES, LANDLINE_SILENT_WINDOW_SECONDS
 
-SILENT_LINE_PATTERN = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] Claude silent for")
+# Both daemon kill lines: "Claude silent for Ns, killing process" (no output at all)
+# and "Claude owned-progress silent for Ns (...) — killing process" (heartbeats only).
+SILENT_LINE_PATTERN = re.compile(
+    r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] Claude (?:owned-progress )?silent for"
+)
 LOG_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
