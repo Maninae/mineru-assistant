@@ -61,7 +61,8 @@ Partial redactions are reported on the wrapper's stderr.
 
 ## Failure semantics
 
-- Default mode has no external dependency: no Ollama call, no cache.
+- Default mode has no external dependency: no Ollama call, no cache, and
+  `prompts/screen.md` is only loaded on first LLM use.
 - Cache broken → screening proceeds without cache (cache is never load-bearing).
 - Cleaner/splitter crash → exit 78, nothing emitted (fail-closed).
 
@@ -77,7 +78,7 @@ Partial redactions are reported on the wrapper's stderr.
 
 | Var | Default | Notes |
 |-----|---------|-------|
-| `MINERU_FIREWALL_MODE` | `off` | `off` = patterns only (Tier A blocks, everything else passes); `gated` = LLM on Tier-B escalation; `always` = LLM on every unit |
+| `MINERU_FIREWALL_MODE` | `off` | case-insensitive; unknown values fall back to `off`. `off` = patterns only (Tier A blocks, everything else passes); `gated` = LLM on Tier-B escalation; `always` = LLM on every unit |
 | `MINERU_FIREWALL_MODEL` | `qwen3:8b` | gated/always only; must be pulled in Ollama |
 | `MINERU_FIREWALL_OLLAMA_URL` | `http://localhost:11434` | gated/always only |
 | `MINERU_FIREWALL_CACHE` | `$MINERU_HOME/cache/firewall-verdicts.sqlite3` | gated/always only |
@@ -106,7 +107,9 @@ echo "some content" | python3 scripts/firewall/screener.py
    - `llm` / `llm-cached` (gated/always only) → tune `prompts/screen.md`
      and add the case to `eval_screener.py`'s corpus.
 3. Telemetry: `logs/firewall/screen.jsonl` logs mode/units/escalated/blocked/
-   noted/ms per invocation (counts only). In `off` mode `escalated` is always 0.
+   noted/ms per invocation (counts only). In `off` mode `escalated` is always 0;
+   `off` is also what any unrecognised `MINERU_FIREWALL_MODE` value resolves to
+   (values are trimmed and lowercased; an unknown value prints one stderr warning).
 
 ## Module responsibilities
 

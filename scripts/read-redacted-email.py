@@ -1,14 +1,13 @@
-"""Read a Gmail message the prompt-injection firewall redacted as a false positive.
+"""Read a Gmail message's raw body with invisible characters stripped, bypassing the firewall.
 
-Why this exists: the firewall (`gog-firewall`) redacts any message unit that trips a
-pattern, and legit Mailchimp / newsletter mail routinely trips the "Hidden
-invisible-character payload (N chars)" rule (benign zero-width tracking cruft). When the
-sender is confirmed-benign and you still need to read the email, this tool is the escape
-hatch documented in `prompts/GMAIL.md` Gotcha 9.
+Why this exists: the firewall (`gog-firewall`) is patterns-only and redacts a message unit
+only on a Tier A hit (chat-template tokens). When such a unit comes from a confirmed-benign
+sender, or when you want the raw body with zero-width / invisible characters removed, this
+tool is the escape hatch documented in `prompts/GMAIL.md` Gotcha 9.
 
 What it does: bypasses the firewall by calling the underlying `gog` binary directly, pulls
-the message, and STRIPS every zero-width / invisible / control character (that family is
-exactly the flagged threat) before printing only the human-visible text.
+the message, and STRIPS every zero-width / invisible / control character (tracking
+cruft, and the channel a hidden payload would use) before printing only the human-visible text.
 
 SECURITY: this bypasses the injection firewall, so the output is UNSCREENED. Stripping the
 invisible characters is the mitigation against hidden-instruction payloads, but you must
@@ -31,9 +30,9 @@ import sys
 # there is no `gog` there, so the wrapper-adjacent path fails with "No such file".
 GOG_BINARY_PATH = "/opt/homebrew/bin/gog"
 
-# Zero-width / bidi / invisible / soft-hyphen families: this IS the flagged "invisible
-# character payload" threat, so deleting it both cleans the text and neutralizes any hidden
-# instruction chars smuggled in those ranges.
+# Zero-width / bidi / invisible / soft-hyphen families: usually newsletter tracking cruft,
+# occasionally a hidden-payload channel, so deleting them both cleans the text and
+# neutralizes any hidden instruction chars smuggled in those ranges.
 INVISIBLE_CHAR_PATTERN = re.compile(
     "[​-‏‪-‮⁠-⁤⁦-⁩﻿­᠎]"
 )

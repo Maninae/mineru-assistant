@@ -485,8 +485,8 @@ def _parse_llm_job(
     pre_steps = _parse_pre_steps(entry.get("pre_steps"), where=where)
     if pre_steps and not custom_prompt:
         # Not an error per se — a job MIGHT legitimately have a pre-step
-        # without a custom prompt (e.g. morning-brief's Ollama pre-warm
-        # runs before the standard `Read <instr>` prompt). So we allow
+        # without a custom prompt (e.g. a cache refresh that runs before
+        # the standard `Read <instr>` prompt). So we allow
         # this. The check is deliberately absent; the docstring on
         # `CronJob.pre_steps` explains why.
         pass

@@ -238,16 +238,12 @@ class TestShippedCronYaml:
         assert job.custom_prompt is True
         assert job.custom_prompt_suffix is None
 
-    def test_morning_brief_pre_step(self, seed_cron: CronConfig) -> None:
+    def test_morning_brief_has_no_pre_steps(self, seed_cron: CronConfig) -> None:
         job = get_job(seed_cron, "morning-brief")
         assert job is not None
-        # morning-brief has a pre-step but is NOT a custom_prompt job.
+        # A plain LLM job: no pre-steps and NOT a custom_prompt job.
         assert job.custom_prompt is False
-        assert len(job.pre_steps) == 1
-        # The curl command must target Ollama on 11434 — the whole
-        # point of the pre-warm.
-        assert any("11434" in tok for tok in job.pre_steps[0].cmd)
-        assert job.pre_steps[0].allow_fail is True
+        assert job.pre_steps == ()
 
     def test_no_expected_output_jobs(self, seed_cron: CronConfig) -> None:
         # LANDMINE (§7): memory-description AND weekly-deep-consolidation

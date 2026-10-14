@@ -55,24 +55,6 @@ jobs:
     expected_output_glob: briefs_morning/morning-*.md
     idempotency_marker: briefs_morning/morning-{today}.md
     timeout_seconds: 3600
-    pre_steps:
-      # Pre-warm the firewall's Ollama qwen3:8b model in the BACKGROUND
-      # so the first Gmail screen of the day doesn't eat the 5 GB cold
-      # load inside the brief's critical path. Runs before CC; the live
-      # trigger script backgrounds this via `&` — the plist runner will
-      # do the same. `allow_fail: true` because a missing Ollama must
-      # not kill the brief (the firewall silently degrades to
-      # patterns-only screening).
-      - cmd:
-          - /usr/bin/curl
-          - -sS
-          - -m
-          - "120"
-          - http://localhost:11434/api/chat
-          - -d
-          - '{"model": "qwen3:8b", "messages": [{"role": "user", "content": "ok"}], "think": false, "keep_alive": "2h", "stream": false}'
-        allow_fail: true
-        comment: "Pre-warm Ollama qwen3:8b so the first Gmail firewall screen isn't cold."
 
   - name: news-brief
     kind: llm

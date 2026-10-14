@@ -3,7 +3,7 @@
 Frozen dataclasses that describe:
 
   - `PreStep`            one inline shell command run BEFORE the job's LLM
-                         invocation (e.g. Ollama pre-warm, Apple Notes
+                         invocation (e.g. a cache refresh, Apple Notes
                          export, CC-session extraction). Only meaningful
                          on LLM jobs.
   - `CronJob`            one scheduled unit; kind='llm' or 'script'.

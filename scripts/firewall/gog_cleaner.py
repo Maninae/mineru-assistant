@@ -48,7 +48,7 @@ except (json.JSONDecodeError, OSError) as _e:
 # ---------------------------------------------------------------------------
 # HTML → plain text (stdlib only, Python 3.9 safe).
 #
-# Real email bodies are ~96% HTML markup. For LLM screening we keep the
+# Real email bodies are ~96% HTML markup. For screening we keep the
 # *readable* text and throw away the tags. Be defensive: any parse error
 # falls back to a regex tag-strip, then to "" — never raises to the caller.
 # ---------------------------------------------------------------------------
@@ -505,7 +505,7 @@ def _headers_list_to_map(headers_list: List[Dict[str, Any]],
 
     gmail returns payload.headers as a list of {name, value} dicts containing
     every transport header (Delivered-To, ARC-Seal, DKIM-Signature, ...). For
-    LLM screening we only need {from, to, subject, date} — dozens of routing
+    screening we only need {from, to, subject, date} — dozens of routing
     headers per message would balloon token count for no benefit.
     """
     wanted_lower = {w.lower() for w in wanted}

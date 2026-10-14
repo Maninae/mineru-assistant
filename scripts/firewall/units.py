@@ -133,7 +133,8 @@ class UnitizedOutput:
     def unit_texts(self) -> List[str]:
         return self._texts
 
-    def _unit_label(self, i: int) -> str:
+    def unit_label(self, i: int) -> str:
+        """Human-readable location of unit i (e.g. `thread.messages[0]`, `line 3`)."""
         if self.kind == "json":
             if i < len(self._item_refs):
                 key_path, idx = self._item_refs[i]
@@ -150,7 +151,7 @@ class UnitizedOutput:
         output string must not be shown — block the read entirely.
         """
         redactions = [
-            Redaction(self._unit_label(i), v.reason, v.location, v.detector)
+            Redaction(self.unit_label(i), v.reason, v.location, v.detector)
             for i, v in enumerate(verdicts) if not v.safe
         ]
         if not redactions:

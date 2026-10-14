@@ -51,7 +51,21 @@ PROMPT_FILE = SCRIPT_DIR / "prompts" / "screen.md"
 
 OLLAMA_URL = os.environ.get("MINERU_FIREWALL_OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("MINERU_FIREWALL_MODEL", "qwen3:8b")
-MODE = os.environ.get("MINERU_FIREWALL_MODE", "off")  # off | gated | always
+VALID_MODES = ("off", "gated", "always")
+
+
+def _resolve_mode() -> str:
+    """Read MINERU_FIREWALL_MODE; unknown values fall back to off, never to an LLM mode."""
+    raw = os.environ.get("MINERU_FIREWALL_MODE", "off")
+    mode = raw.strip().lower()
+    if mode in VALID_MODES:
+        return mode
+    print("firewall: unknown MINERU_FIREWALL_MODE {!r}, using 'off' (patterns only)".format(raw),
+          file=sys.stderr)
+    return "off"
+
+
+MODE = _resolve_mode()
 
 LLM_TIMEOUT = 60          # per-call; first call may include model cold-load
 LLM_RETRIES = 1           # retry once on connection error / timeout
@@ -120,10 +134,20 @@ def _load_prompt_template() -> str:
     return "\n".join(lines).strip()
 
 
-_PROMPT_TEMPLATE = _load_prompt_template()
-# Cache key namespace: changing the prompt or model invalidates old verdicts
-_CACHE_NS = hashlib.sha256(
-    (MODEL + "\x00" + _PROMPT_TEMPLATE).encode("utf-8")).hexdigest()[:16]
+_PROMPT_CACHE: List[str] = []
+
+
+def _prompt_template() -> str:
+    """Load prompts/screen.md on first LLM use, so off mode has no file dependency."""
+    if not _PROMPT_CACHE:
+        _PROMPT_CACHE.append(_load_prompt_template())
+    return _PROMPT_CACHE[0]
+
+
+def _cache_namespace() -> str:
+    """Cache key namespace: changing the prompt or model invalidates old verdicts."""
+    return hashlib.sha256(
+        (MODEL + "\x00" + _prompt_template()).encode("utf-8")).hexdigest()[:16]
 
 
 # ============================================================================
@@ -155,7 +179,7 @@ def _cache_conn() -> Optional[sqlite3.Connection]:
 
 
 def _cache_key(text: str) -> str:
-    return hashlib.sha256((_CACHE_NS + "\x00" + text).encode("utf-8")).hexdigest()
+    return hashlib.sha256((_cache_namespace() + "\x00" + text).encode("utf-8")).hexdigest()
 
 
 def _cache_get(conn: Optional[sqlite3.Connection], text: str) -> Optional[ScreenResult]:
@@ -211,7 +235,7 @@ _RESPONSE_SCHEMA = {
 
 def _llm_verdict(text: str) -> ScreenResult:
     """One LLM call. Fail-closed: any unrecoverable error blocks the unit."""
-    prompt = _PROMPT_TEMPLATE.replace("{text}", text)
+    prompt = _prompt_template().replace("{text}", text)
     body = json.dumps({
         "model": MODEL,
         "messages": [{"role": "user", "content": prompt}],

@@ -173,9 +173,10 @@ def scan(text: str) -> PatternVerdict:
     # the whole text, not just a prefix.
     if len(text.strip()) >= SUBSTANTIVE_LENGTH:
         return PatternVerdict(False, True, "substantive unscreened text",
-                              "length {} chars".format(len(text)), [])
+                              "length {} chars".format(len(text)), [],
+                              invisible_count)
 
-    return PatternVerdict(False, False)
+    return PatternVerdict(False, False, invisible_count=invisible_count)
 
 
 # ============================================================================

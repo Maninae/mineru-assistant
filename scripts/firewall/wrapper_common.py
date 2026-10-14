@@ -89,7 +89,7 @@ scripts/firewall/patterns.py.
     for i, verdict in enumerate(verdicts):
         if verdict.note:
             print("firewall: {} in unit {}, passed (patterns-only mode)".format(
-                verdict.note, unitized._unit_label(i)), file=sys.stderr)
+                verdict.note, unitized.unit_label(i)), file=sys.stderr)
     if redactions:
         print("🛡️ firewall: redacted {} of {} units (stubs left in place):\n{}".format(
             len(redactions), len(unitized.unit_texts()),

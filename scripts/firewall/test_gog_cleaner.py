@@ -111,9 +111,9 @@ CALENDAR_EVENTS_OUTPUT = {
                 "timeZone": "America/Los_Angeles"
             },
             "status": "confirmed",
-            "summary": "OW - Allergy shot walk-in",
+            "summary": "Dentist appointment",
             "updated": "2025-11-20T19:40:06.264Z",
-            "location": "123 Medical Center Dr"
+            "location": "100 Example St, Springfield"
         }
     ]
 }
@@ -550,8 +550,8 @@ class TestGogCleanerCalendar(unittest.TestCase):
         result = clean_calendar_events(CALENDAR_EVENTS_OUTPUT)
         event = result["events"][0]
         
-        self.assertEqual(event["summary"], "OW - Allergy shot walk-in")
-        self.assertEqual(event["location"], "123 Medical Center Dr")
+        self.assertEqual(event["summary"], "Dentist appointment")
+        self.assertEqual(event["location"], "100 Example St, Springfield")
         self.assertIn("start", event)
         self.assertIn("end", event)
         self.assertIn("id", event)
@@ -612,8 +612,8 @@ class TestGogCleanerCalendar(unittest.TestCase):
         self.assertIn("dateTime", event["start"])
 
         # Same KEEPS as the list path
-        self.assertEqual(event["summary"], "OW - Allergy shot walk-in")
-        self.assertEqual(event["location"], "123 Medical Center Dr")
+        self.assertEqual(event["summary"], "Dentist appointment")
+        self.assertEqual(event["location"], "100 Example St, Springfield")
         self.assertIn("id", event)
         self.assertEqual(event["status"], "confirmed")
 
