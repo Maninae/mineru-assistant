@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from health_watchdog.browser_hygiene import BrowserStatus
 from health_watchdog.config import (
+    BROWSER_ORPHAN_SUSTAINED_RUNS,
     BROWSER_RENDERER_CPU_PERCENT,
     BROWSER_RENDERER_CPU_SUSTAINED_RUNS,
     DISK_FREE_CRITICAL_GB,
@@ -56,6 +57,7 @@ STREAK_MEMORY = "memory"
 STREAK_LOAD_WARN = "load_warn"
 STREAK_LOAD_CRITICAL = "load_critical"
 STREAK_RENDERER_CPU = "renderer_cpu"
+STREAK_BROWSER_ORPHANS = "browser_orphans"
 FLAG_MEMORY = "memory_bad"
 FLAG_LOAD = "load_bad"
 
@@ -221,6 +223,9 @@ def hung_jobs_finding(report: KillReport) -> Optional[Finding]:
         CHECK_HUNG_JOBS, severity,
         "%s %d hung scheduled job(s)." % (verb, len(killed_lines)),
         details, action_taken=True,
+        # This message already covers the survivors; start their standing check's
+        # cooldown so it does not repeat the news five minutes later.
+        also_cools=[CHECK_SURVIVORS] if report.survivors else [],
     )
 
 
@@ -238,6 +243,12 @@ def survivors_finding(survivor_pids: List[int]) -> Optional[Finding]:
             len(survivor_pids), ", ".join(str(pid) for pid in survivor_pids)),
         ["Unkillable processes mean tccd is frozen. " + TCC_FIX_TEXT],
     )
+
+
+def browser_orphans_confirmed(orphan_count: int, state: Dict[str, Any]) -> bool:
+    """Orphaned profile Chromium must be seen on consecutive runs before it is terminated."""
+    streak = bump_streak(state, STREAK_BROWSER_ORPHANS, orphan_count > 0)
+    return orphan_count > 0 and streak >= BROWSER_ORPHAN_SUSTAINED_RUNS
 
 
 def orphaned_browser_finding(process_count: int, killed: List[int], survivors: List[int], dry_run: bool) -> Finding:

@@ -118,8 +118,10 @@ def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
         stop_summary = "dry run, not stopped" if outcome is None else outcome_summary(outcome)
         logger.warning("browser stop (%s): %s", stop_reason, stop_summary)
         findings.append(evaluate.browser_finding(browser, stop_reason, stop_summary))
-    orphans = browser_hygiene.orphaned_profile_processes(browser, table)
+    orphans = browser_hygiene.orphaned_profile_processes(table)
     if orphans:
+        logger.info("profile Chromium with no browser server process: %s", [row.pid for row in orphans])
+    if evaluate.browser_orphans_confirmed(len(orphans), state):
         orphan_pids = [row.pid for row in orphans]
         killed, survivors = ([], []) if DRY_RUN else hung_jobs.terminate_pids(orphan_pids)
         logger.warning("orphaned browser processes %s: dry_run=%s killed=%s survivors=%s",

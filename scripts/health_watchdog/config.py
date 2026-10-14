@@ -95,6 +95,10 @@ MAX_BROWSER_TABS = 12
 BROWSER_RENDERER_CPU_PERCENT = 50.0
 BROWSER_RENDERER_CPU_SUSTAINED_RUNS = 3
 BROWSER_TAB_SUMMARY_LIMIT = 8
+# Profile Chromium counts as orphaned only when NO browser-server process is in the
+# ps table (a slow /health must never authorize a kill), and only after N runs.
+BROWSER_SERVER_COMMAND_MARKER = "/browser/server.py"
+BROWSER_ORPHAN_SUSTAINED_RUNS = 2
 
 # Landline: "Claude silent for Ns, killing process" lines within the window.
 LANDLINE_SILENT_WINDOW_SECONDS = 6 * 3600
@@ -139,6 +143,9 @@ JOB_COMMAND_MARKERS = (
     "/bin/imsg-named",
     "/bin/gog-firewall",
     "/scripts/boundary_validator.py",
+    "/scripts/sweep_group_members.py",
+    "/scripts/build_contact_map.py",
+    "/scripts/extract-cc-sessions.py",
 )
 # run_cc_job's prompt is "Read recurring/<job>.md and execute the job.", so a
 # headless `claude --print` carrying this marker is a scheduled CC job.

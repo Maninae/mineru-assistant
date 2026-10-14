@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 
 from health_watchdog.config import (
     BROWSER_CLI,
+    BROWSER_SERVER_COMMAND_MARKER,
     BROWSER_HTTP_DEADLINE_SECONDS,
     BROWSER_PORT,
     BROWSER_PROFILE_DIR,
@@ -92,13 +93,19 @@ def renderer_processes(table: List[ProcessInfo], profile_dir: Path = BROWSER_PRO
     return [row for row in profile_processes(table, profile_dir) if RENDERER_MARKER in row.command]
 
 
-def orphaned_profile_processes(status: "BrowserStatus", table: List[ProcessInfo]) -> List[ProcessInfo]:
-    """Profile Chromium processes left behind while the browser server is down.
+def browser_server_processes(table: List[ProcessInfo]) -> List[ProcessInfo]:
+    """The browser server itself (browser/server.py), by command line."""
+    return [row for row in table if BROWSER_SERVER_COMMAND_MARKER in row.command]
 
-    With the server gone nothing will ever close them, so they are the leak the
-    incident showed (renderers burning CPU for days); the caller may terminate them.
+
+def orphaned_profile_processes(table: List[ProcessInfo]) -> List[ProcessInfo]:
+    """Profile Chromium processes left behind with NO browser-server process alive.
+
+    Gated on the process table only: a slow or unreachable /health (plausible under
+    incident load) must never make a live server's Chromium look orphaned. With the
+    server truly gone nothing will ever close them, so the caller may terminate them.
     """
-    if status.server_running:
+    if not table or browser_server_processes(table):
         return []
     return profile_processes(table)
 
