@@ -29,7 +29,8 @@ WATCHDOG_CMD = "/usr/bin/python3 -m health_watchdog"
 
 
 ENGINE_DEFAULT_MARKERS = (
-    "/bin/imsg-firewall", "/bin/imsg-named", "/bin/gog-firewall", "/scripts/boundary_validator.py")
+    "/bin/imsg-firewall", "/bin/imsg-named", "/bin/gog-firewall", "/scripts/boundary_validator.py",
+    "/scripts/sweep_group_members.py", "/scripts/build_contact_map.py", "/scripts/extract-cc-sessions.py")
 
 
 @pytest.fixture(autouse=True)
@@ -138,12 +139,55 @@ def test_private_marker_makes_an_indirect_helper_orphan_killable(monkeypatch):
     assert 130 in {c.root_pid for c in select_incident()}
 
 
-def test_selector_without_launchctl_still_finds_plist_scripts_by_path():
+def test_selector_without_launchctl_still_finds_plist_scripts_and_engine_job_markers():
     # 120 runs the sweep's inner python directly (its bash wrapper is what the plist
-    # names), so without launchctl it is the one incident job that goes unfound.
-    roots = {c.root_pid for c in select_hung_jobs(INCIDENT_TABLE, {}, INCIDENT_JOBS, SELF_PID, USER)}
-    assert {100, 110, 131, 132, 134} <= roots
-    assert 133 not in roots and 130 not in roots
+    # names); the engine marker for sweep_group_members.py makes it selectable anyway,
+    # with its imsg-firewall + imsg grandchildren. The nohup'd backfill (133) stays out.
+    candidates = {c.root_pid: c for c in select_hung_jobs(INCIDENT_TABLE, {}, INCIDENT_JOBS, SELF_PID, USER)}
+    assert {100, 110, 120, 131, 132, 134} <= set(candidates)
+    assert set(candidates[120].descendant_pids) == {121, 122}
+    assert 133 not in candidates and 130 not in candidates
+
+
+def test_service_scripts_stay_protected_when_launchctl_is_empty():
+    # daemon-watchdog is an allowlisted service label; with launchctl unavailable its
+    # script must still be recognised by path and never selected, even when old.
+    jobs = INCIDENT_JOBS + [job("daemon-watchdog", script="/some/deploy/watchdog.sh")]
+    table = INCIDENT_TABLE + [proc(950, 1, "/bin/bash /some/deploy/watchdog.sh", age=5 * HOURS)]
+    roots = {c.root_pid for c in select_hung_jobs(table, {}, jobs, SELF_PID, USER)}
+    assert 950 not in roots and 100 in roots
+
+
+def test_handle_hung_jobs_survivor_cadence_one_critical_then_cooldown(monkeypatch):
+    """Unkillable orphan CC job across 8 runs: one CRITICAL at the kill, silence until the
+    30 min survivor cooldown expires, one recovery when it finally disappears."""
+    from health_watchdog import __main__ as watchdog_main
+    from health_watchdog.state import decide_alerts, default_state
+
+    monkeypatch.setattr("health_watchdog.hung_jobs.terminate_pids", lambda pids: ([], list(pids)))
+    monkeypatch.setattr("health_watchdog.__main__.DRY_RUN", False)
+    monkeypatch.setattr("health_watchdog.__main__.current_user", lambda: USER)
+    monkeypatch.setattr("os.getpid", lambda: SELF_PID)
+    state = default_state()
+    sent = []
+    base = 1_000_000.0
+    for run in range(8):
+        now_ts = base + run * 300
+        table = [
+            proc(600, 1, "claude-fda --permission-mode bypassPermissions --print "
+                         "Read recurring/news-brief.md and execute the job.", age=4 * HOURS + run * 300),
+            proc(SELF_PID, 1, WATCHDOG_CMD, age=5),
+        ]
+        findings = watchdog_main.handle_hung_jobs(table, {}, INCIDENT_JOBS, state, now_ts)
+        decision = decide_alerts(findings, state, now_ts)
+        sent.append(["%s:%s" % (f.check_id, f.severity.value) for f in decision.to_send])
+    assert sent == [["hung_jobs:CRITICAL"], [], [], [], [], [], ["hung_jobs_survivor:CRITICAL"], []]
+    assert set(state["survivors"]) == {"600"}
+    findings = watchdog_main.handle_hung_jobs([proc(SELF_PID, 1, WATCHDOG_CMD, age=5)], {}, INCIDENT_JOBS,
+                                              state, base + 8 * 300)
+    decision = decide_alerts(findings, state, base + 8 * 300)
+    assert decision.to_send == [] and decision.recovered == ["hung_jobs_survivor"]
+    assert state["survivors"] == {}
 
 
 def test_oldest_candidate_comes_first():

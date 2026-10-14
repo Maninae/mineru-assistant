@@ -160,6 +160,19 @@ def test_survivor_realert_cadence_is_one_critical_per_cooldown():
     assert evaluate.survivors_finding([]) is None
 
 
+def test_kill_with_survivors_seeds_the_survivor_cooldown():
+    state = default_state()
+    candidate = HungJobCandidate(root_pid=600, age_seconds=4 * 3600, command="claude-fda --print")
+    kill = evaluate.hung_jobs_finding(KillReport([candidate], dry_run=False, killed=[], survivors=[600]))
+    assert kill.also_cools == ["hung_jobs_survivor"]
+    assert decide_alerts([kill], state, NOW).to_send == [kill]
+    standing = evaluate.survivors_finding([600])
+    assert decide_alerts([standing], state, NOW + 300).to_send == []
+    assert decide_alerts([standing], state, NOW + config.CRITICAL_COOLDOWN_SECONDS).to_send == [standing]
+    # A clean kill seeds nothing.
+    assert evaluate.hung_jobs_finding(KillReport([candidate], dry_run=False, killed=[600])).also_cools == []
+
+
 def test_orphaned_browser_finding():
     finding = evaluate.orphaned_browser_finding(3, killed=[1, 2, 3], survivors=[], dry_run=False)
     assert finding.severity == Severity.WARN and finding.action_taken and "3 orphaned" in finding.title

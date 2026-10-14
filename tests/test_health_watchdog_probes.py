@@ -120,16 +120,29 @@ def test_job_script_paths_skips_interpreters_and_services():
     assert job_script_paths(jobs) == {"/w/scripts/trigger-a.sh", "/w/scripts/export.py"}
 
 
-def test_orphaned_profile_processes_only_when_server_down():
-    from health_watchdog.browser_hygiene import BrowserStatus, orphaned_profile_processes
+def test_orphaned_profile_processes_gate_on_server_process_not_http():
+    from health_watchdog import evaluate
+    from health_watchdog.browser_hygiene import orphaned_profile_processes
+    from health_watchdog.state import default_state
 
-    table = parse_ps_output(
+    chromium = (
         "1 0 1 ?? u 00:01 50.0 1 Chromium --user-data-dir=%s\n"
         "2 1 2 ?? u 00:01 50.0 1 Chromium Helper --type=renderer --user-data-dir=%s\n"
         "3 0 3 ?? u 00:01 50.0 1 Chromium --user-data-dir=/elsewhere\n"
         % (config.BROWSER_PROFILE_DIR, config.BROWSER_PROFILE_DIR))
-    assert [r.pid for r in orphaned_profile_processes(BrowserStatus(server_running=False), table)] == [1, 2]
-    assert orphaned_profile_processes(BrowserStatus(server_running=True), table) == []
+    server_alive = parse_ps_output(chromium + "9 1 9 ?? u 01:00 0.0 1 /opt/homebrew/bin/python3 %s/browser/server.py\n"
+                                   % config.MINERU_HOME)
+    server_gone = parse_ps_output(chromium)
+    # Server process present (even if /health timed out): never orphaned.
+    assert orphaned_profile_processes(server_alive) == []
+    assert [r.pid for r in orphaned_profile_processes(server_gone)] == [1, 2]
+    assert orphaned_profile_processes([]) == []  # a failed ps is not evidence
+    # And termination needs two consecutive sightings.
+    state = default_state()
+    assert evaluate.browser_orphans_confirmed(2, state) is False
+    assert evaluate.browser_orphans_confirmed(2, state) is True
+    assert evaluate.browser_orphans_confirmed(0, state) is False
+    assert evaluate.browser_orphans_confirmed(2, state) is False
 
 
 def test_tab_summaries_use_hosts_only_and_cap():
