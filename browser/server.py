@@ -266,9 +266,9 @@ class BrowserManager:
         """
         try:
             opened = datetime.datetime.fromisoformat(str(opened_at))
-        except ValueError:
+            seconds = max(0, int((datetime.datetime.now().astimezone() - opened).total_seconds()))
+        except (TypeError, ValueError):  # TypeError: naive stamp minus aware now
             return "?"
-        seconds = max(0, int((datetime.datetime.now().astimezone() - opened).total_seconds()))
         days, rest = divmod(seconds, 86400)
         hours, rest = divmod(rest, 3600)
         minutes = rest // 60
