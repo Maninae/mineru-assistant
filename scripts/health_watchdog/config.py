@@ -90,8 +90,14 @@ MAX_JOB_AGE_SECONDS = 3 * 3600
 # Per-job overrides keyed by label suffix (the part after LAUNCHD_PREFIX + ".").
 JOB_MAX_AGE_OVERRIDES_SECONDS = {}  # type: dict
 
-# Browser hygiene.
-MAX_BROWSER_TABS = 12
+# Browser hygiene. Tab piles are SURFACED, never reaped: tabs may legitimately sit
+# open for hours or days, so only a runaway renderer or orphaned Chromium is acted on.
+BROWSER_TABS_HEADSUP = 20
+BROWSER_TABS_HEADSUP_COOLDOWN_S = 24 * 3600
+BROWSER_IDLE_TAB_DAYS = 7
+BROWSER_IDLE_TABS_COOLDOWN_S = 24 * 3600
+BROWSER_TAB_LIST_LIMIT = 25
+BROWSER_TAB_URL_MAX_CHARS = 70
 BROWSER_RENDERER_CPU_PERCENT = 50.0
 BROWSER_RENDERER_CPU_SUSTAINED_RUNS = 3
 BROWSER_TAB_SUMMARY_LIMIT = 8

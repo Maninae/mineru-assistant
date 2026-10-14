@@ -122,6 +122,10 @@ def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
     browser = browser_hygiene.inspect_browser(table)
     logger.info("browser: running=%s tabs=%d renderers=%d hottest=%.0f%%",
                 browser.server_running, browser.tab_count, len(browser.renderers), browser.hottest_renderer_cpu)
+    for tab_finding in (evaluate.evaluate_tab_pile(browser, now.timestamp()),
+                        evaluate.evaluate_idle_tabs(browser, now.timestamp())):
+        if tab_finding is not None:
+            findings.append(tab_finding)
     stop_reason = evaluate.browser_needs_stop(browser, state)
     if stop_reason:
         outcome = browser_hygiene.stop_browser(DRY_RUN)

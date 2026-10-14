@@ -1,4 +1,4 @@
-"""Browser hygiene: leaked tabs or runaway renderers in the stealth Chromium.
+"""Browser hygiene: tab piles, idle tabs, runaway renderers, orphaned stealth Chromium.
 
 Python 3.9 compatible (see config.py).
 
@@ -9,6 +9,7 @@ the tab snapshot at cache/browser-tabs.json is stale, so it is only consulted
 while /health answers.
 """
 
+import datetime as dt
 import json
 import sys
 import urllib.error
@@ -42,6 +43,7 @@ class BrowserStatus:
     server_running: bool
     tab_count: int = 0
     tab_summaries: List[str] = field(default_factory=list)
+    tabs: List[Dict[str, Any]] = field(default_factory=list)
     renderers: List[ProcessInfo] = field(default_factory=list)
 
     @property
@@ -80,6 +82,36 @@ def summarize_tabs(tabs: List[Dict[str, Any]], limit: int = BROWSER_TAB_SUMMARY_
     if len(tabs) > limit:
         lines.append("... and %d more" % (len(tabs) - limit))
     return lines
+
+
+def parse_tab_timestamp(text: Any) -> Optional[float]:
+    """Epoch seconds from the server's ISO 8601 stamp ("2026-10-13T22:01:05-07:00").
+
+    3.9's fromisoformat handles the "+HH:MM" offset the server writes; a stamp with
+    no offset is read as local time. None for anything unparseable.
+    """
+    if not isinstance(text, str) or not text:
+        return None
+    try:
+        return dt.datetime.fromisoformat(text).timestamp()
+    except ValueError:
+        return None
+
+
+def format_age(seconds: float) -> str:
+    """Coarse age for alert lines: 45m, 7h, 3d."""
+    seconds = max(0, int(seconds))
+    if seconds >= 86400:
+        return "%dd" % (seconds // 86400)
+    if seconds >= 3600:
+        return "%dh" % (seconds // 3600)
+    return "%dm" % (seconds // 60)
+
+
+def truncate_url(url: Any, max_chars: int) -> str:
+    """URL cut to `max_chars` with an ellipsis marker."""
+    text = str(url or "")
+    return text if len(text) <= max_chars else text[: max_chars - 3] + "..."
 
 
 def profile_processes(table: List[ProcessInfo], profile_dir: Path = BROWSER_PROFILE_DIR) -> List[ProcessInfo]:
@@ -125,7 +157,7 @@ def inspect_browser(table: List[ProcessInfo], port: int = BROWSER_PORT) -> Brows
     tab_count = len(tabs) if tabs else int(health.get("tabs", 0) or 0)
     return BrowserStatus(
         server_running=True, tab_count=tab_count,
-        tab_summaries=summarize_tabs(tabs or []), renderers=renderers,
+        tab_summaries=summarize_tabs(tabs or []), tabs=list(tabs or []), renderers=renderers,
     )
 
 

@@ -3,17 +3,24 @@
 Python 3.9 compatible (see config.py).
 
 Every function here is pure apart from `state["streaks"]`, which the sustained
-checks (tccd CPU, load, renderer CPU) update through bump_streak. Nothing in this
+checks (tccd CPU, load, renderer CPU) update through bump_streak. OrbStack's
+threshold logic lives in evaluate_orbstack.py under the same rules. Nothing in this
 module runs a command, so the whole threshold surface is unit-testable with fakes.
 """
 
 from typing import Any, Dict, List, Optional
 
-from health_watchdog.browser_hygiene import BrowserStatus
+from health_watchdog.browser_hygiene import BrowserStatus, format_age, parse_tab_timestamp, truncate_url
 from health_watchdog.config import (
+    BROWSER_IDLE_TAB_DAYS,
+    BROWSER_IDLE_TABS_COOLDOWN_S,
     BROWSER_ORPHAN_SUSTAINED_RUNS,
     BROWSER_RENDERER_CPU_PERCENT,
     BROWSER_RENDERER_CPU_SUSTAINED_RUNS,
+    BROWSER_TAB_LIST_LIMIT,
+    BROWSER_TAB_URL_MAX_CHARS,
+    BROWSER_TABS_HEADSUP,
+    BROWSER_TABS_HEADSUP_COOLDOWN_S,
     DISK_FREE_CRITICAL_GB,
     DISK_FREE_WARN_GB,
     LANDLINE_SILENT_WARN_COUNT,
@@ -22,7 +29,6 @@ from health_watchdog.config import (
     LOAD_PER_CORE_CRITICAL,
     LOAD_PER_CORE_WARN,
     LOAD_SUSTAINED_RUNS,
-    MAX_BROWSER_TABS,
     MEMORY_FREE_CLEAR_PERCENT,
     MEMORY_FREE_CRITICAL_PERCENT,
     MEMORY_FREE_WARN_PERCENT,
@@ -51,6 +57,10 @@ CHECK_BROWSER = "browser"
 CHECK_HUNG_JOBS = "hung_jobs"
 CHECK_SURVIVORS = "hung_jobs_survivor"
 CHECK_BROWSER_ORPHANS = "browser_orphans"
+CHECK_BROWSER_TABS = "browser_tabs"
+CHECK_BROWSER_IDLE_TABS = "browser_idle_tabs"
+IDLE_TABS_REPLY_HINT = 'Reply to Mineru: "close idle tabs", or the tab ids to close.'
+SECONDS_PER_DAY = 86400
 
 STREAK_TCCD_CPU = "tccd_cpu"
 STREAK_MEMORY = "memory"
@@ -173,16 +183,57 @@ def evaluate_landline(silent_kill_count: int, snapshot: SystemSnapshot) -> Optio
 
 
 def browser_needs_stop(status: BrowserStatus, state: Dict[str, Any]) -> Optional[str]:
-    """Reason to stop the browser (tab leak or sustained hot renderer), or None."""
+    """Reason to stop the browser (a renderer hot for N runs), or None.
+
+    Tab count is deliberately NOT a reason: tabs may sit open for days, so piles are
+    surfaced by evaluate_tab_pile / evaluate_idle_tabs instead of reaped.
+    """
     hot = status.server_running and status.hottest_renderer_cpu >= BROWSER_RENDERER_CPU_PERCENT
     renderer_streak = bump_streak(state, STREAK_RENDERER_CPU, hot)
     if not status.server_running:
         return None
-    if status.tab_count > MAX_BROWSER_TABS:
-        return "%d tabs open (limit %d)" % (status.tab_count, MAX_BROWSER_TABS)
     if renderer_streak >= BROWSER_RENDERER_CPU_SUSTAINED_RUNS:
         return "a renderer at %.0f%% CPU for %d checks in a row" % (status.hottest_renderer_cpu, renderer_streak)
     return None
+
+
+def evaluate_tab_pile(status: BrowserStatus, now_ts: float) -> Optional[Finding]:
+    """More than BROWSER_TABS_HEADSUP tabs -> a daily WARN listing them. No action."""
+    if not status.server_running or status.tab_count <= BROWSER_TABS_HEADSUP:
+        return None
+    lines = []  # type: List[str]
+    for tab in status.tabs[:BROWSER_TAB_LIST_LIMIT]:
+        opened_ts = parse_tab_timestamp(tab.get("openedAt"))
+        age = format_age(now_ts - opened_ts) if opened_ts is not None else "?"
+        lines.append("%s · %s" % (age, truncate_url(tab.get("url"), BROWSER_TAB_URL_MAX_CHARS)))
+    if len(status.tabs) > BROWSER_TAB_LIST_LIMIT:
+        lines.append("... and %d more" % (len(status.tabs) - BROWSER_TAB_LIST_LIMIT))
+    return Finding(CHECK_BROWSER_TABS, Severity.WARN, "%d stealth-browser tabs open." % status.tab_count,
+                   lines, cooldown_seconds=BROWSER_TABS_HEADSUP_COOLDOWN_S)
+
+
+def evaluate_idle_tabs(status: BrowserStatus, now_ts: float) -> Optional[Finding]:
+    """Tabs with no activity for BROWSER_IDLE_TAB_DAYS -> a daily WARN with their ids. No action."""
+    if not status.server_running:
+        return None
+    idle_cutoff = now_ts - BROWSER_IDLE_TAB_DAYS * SECONDS_PER_DAY
+    idle = []  # type: List[str]
+    for tab in status.tabs:
+        last_ts = parse_tab_timestamp(tab.get("lastActivityAt"))
+        if last_ts is None or last_ts >= idle_cutoff:
+            continue
+        idle.append("%s · idle %s · %s" % (
+            tab.get("targetId", "?"), format_age(now_ts - last_ts),
+            truncate_url(tab.get("url"), BROWSER_TAB_URL_MAX_CHARS)))
+    if not idle:
+        return None
+    lines = idle[:BROWSER_TAB_LIST_LIMIT]
+    if len(idle) > BROWSER_TAB_LIST_LIMIT:
+        lines.append("... and %d more" % (len(idle) - BROWSER_TAB_LIST_LIMIT))
+    lines.append(IDLE_TABS_REPLY_HINT)
+    return Finding(CHECK_BROWSER_IDLE_TABS, Severity.WARN,
+                   "%d tabs idle for over a week." % len(idle), lines,
+                   cooldown_seconds=BROWSER_IDLE_TABS_COOLDOWN_S)
 
 
 def browser_finding(status: BrowserStatus, reason: str, stop_summary: str) -> Finding:

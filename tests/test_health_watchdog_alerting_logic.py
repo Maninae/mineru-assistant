@@ -121,14 +121,69 @@ def renderer(cpu):
                        rss_kb=1, command="Chromium Helper --type=renderer")
 
 
-def test_browser_tab_leak_and_sustained_renderer():
+def test_tab_count_never_stops_the_browser_but_sustained_renderer_does():
     state = default_state()
     assert evaluate.browser_needs_stop(BrowserStatus(server_running=False, tab_count=40), state) is None
-    assert "26 tabs" in evaluate.browser_needs_stop(BrowserStatus(server_running=True, tab_count=26), state)
+    for _ in range(5):
+        assert evaluate.browser_needs_stop(BrowserStatus(server_running=True, tab_count=60), state) is None
     hot = BrowserStatus(server_running=True, tab_count=3, renderers=[renderer(97.0)])
     for _ in range(config.BROWSER_RENDERER_CPU_SUSTAINED_RUNS - 1):
         assert evaluate.browser_needs_stop(hot, state) is None
     assert "renderer at 97%" in evaluate.browser_needs_stop(hot, state)
+
+
+TAB_NOW = dt.datetime(2026, 10, 13, 22, 0, tzinfo=dt.timezone(dt.timedelta(hours=-7)))
+
+
+def tab(index, opened_days_ago, idle_days_ago, url=None):
+    return {
+        "targetId": "tab_%04d" % index,
+        "url": url or "https://example.com/page/%d" % index,
+        "openedAt": (TAB_NOW - dt.timedelta(days=opened_days_ago)).isoformat(timespec="seconds"),
+        "lastActivityAt": (TAB_NOW - dt.timedelta(days=idle_days_ago)).isoformat(timespec="seconds"),
+        "openedBy": "api",
+    }
+
+
+def tab_status(tabs):
+    return BrowserStatus(server_running=True, tab_count=len(tabs), tabs=tabs)
+
+
+def test_tab_pile_headsup_only_above_threshold_lists_age_and_truncated_url():
+    now_ts = TAB_NOW.timestamp()
+    at_limit = [tab(i, 1, 0) for i in range(config.BROWSER_TABS_HEADSUP)]
+    assert evaluate.evaluate_tab_pile(tab_status(at_limit), now_ts) is None
+    long_url = "https://example.com/" + "x" * 200
+    pile = [tab(i, 2, 0) for i in range(29)] + [tab(99, 0.25, 0, url=long_url)]
+    finding = evaluate.evaluate_tab_pile(tab_status(pile), now_ts)
+    assert finding.check_id == evaluate.CHECK_BROWSER_TABS and finding.severity == Severity.WARN
+    assert finding.title == "30 stealth-browser tabs open." and not finding.action_taken
+    assert finding.cooldown_seconds == config.BROWSER_TABS_HEADSUP_COOLDOWN_S
+    assert finding.details[0] == "2d · https://example.com/page/0"
+    assert len(finding.details) == config.BROWSER_TAB_LIST_LIMIT + 1
+    assert finding.details[-1] == "... and 5 more"
+    assert evaluate.evaluate_tab_pile(BrowserStatus(server_running=False, tab_count=50), now_ts) is None
+
+
+def test_idle_tabs_over_a_week_listed_with_ids_and_reply_hint():
+    now_ts = TAB_NOW.timestamp()
+    tabs = [tab(1, 10, 9), tab(2, 10, 6), tab(3, 30, 8), {"targetId": "tab_bad", "lastActivityAt": "garbage"}]
+    finding = evaluate.evaluate_idle_tabs(tab_status(tabs), now_ts)
+    assert finding.title == "2 tabs idle for over a week."
+    assert finding.details[0] == "tab_0001 · idle 9d · https://example.com/page/1"
+    assert finding.details[1].startswith("tab_0003 · idle 8d")
+    assert finding.details[-1] == 'Reply to Mineru: "close idle tabs", or the tab ids to close.'
+    assert not finding.action_taken and finding.cooldown_seconds == config.BROWSER_IDLE_TABS_COOLDOWN_S
+    assert evaluate.evaluate_idle_tabs(tab_status([tab(1, 10, 6)]), now_ts) is None
+
+
+def test_per_finding_cooldown_overrides_severity_default():
+    state = default_state()
+    finding = evaluate.evaluate_idle_tabs(tab_status([tab(1, 10, 9)]), TAB_NOW.timestamp())
+    assert decide_alerts([finding], state, now_ts=0).to_send
+    past_warn_default = config.WARN_COOLDOWN_SECONDS + 60
+    assert not decide_alerts([finding], state, now_ts=past_warn_default).to_send
+    assert decide_alerts([finding], state, now_ts=config.BROWSER_IDLE_TABS_COOLDOWN_S).to_send
 
 
 def test_hung_jobs_finding_escalates_on_sigkill_survivors():
