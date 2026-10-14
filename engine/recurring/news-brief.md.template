@@ -98,7 +98,7 @@ Fetch any unread issues of your morning news-digest newsletter(s) and extract ke
 
 Search via gog-firewall (per the GMAIL.md rule — the Gmail MCP connector is retired):
 - `{{MINERU_HOME}}/bin/gog-firewall gmail search "from:your-digest-sender.example.com is:unread label:YourDigestLabel" --max 5 --json`
-- If a long body comes back redacted (`firewall_blocked`), skip that newsletter this run and still mark it read in Step 6.
+- If a body comes back redacted (`firewall_blocked`, now rare), skip that newsletter this run and still mark it read in Step 6.
 
 For each unread digest email:
 1. Fetch the full body: `{{MINERU_HOME}}/bin/gog-firewall gmail thread get <threadId> --json`

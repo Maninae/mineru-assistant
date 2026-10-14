@@ -95,7 +95,7 @@ Events are returned under the `events` field as structured JSON. Read fields dir
 **Read via gog-firewall** (per the GMAIL.md rule — the Gmail MCP connector is retired):
 - `{{MINERU_HOME}}/bin/gog-firewall gmail search "after:YYYY/MM/DD -label:CATEGORY_PROMOTIONS -label:CATEGORY_SOCIAL -label:CATEGORY_UPDATES" --max 50 --json` — where `YYYY/MM/DD` = 14 days before today (e.g. today March 26 → `after:2026/03/12`). Results are under `.threads[]`.
 - For any thread you need the full body of: `{{MINERU_HOME}}/bin/gog-firewall gmail thread get <threadId> --json`.
-- A redacted (`firewall_blocked`) unit on a long email is expected occasionally — skip that thread rather than fighting it.
+- A redacted (`firewall_blocked`) unit is rare (chat-template tokens only) — skip that thread rather than fighting it.
 
 - **Only include emails that need a response or action.** Skip newsletters, promos, order confirmations, autopay notices, routine notifications.
 - **Skip all news-digest newsletters** reserved for the news brief (see the news-brief recipe for the sender list) — those are handled there
