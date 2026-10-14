@@ -5,21 +5,18 @@
     <key>Label</key>
     <string>{{LAUNCHD_PREFIX}}.health-watchdog</string>
 
-    <!-- bash must be the launchd-responsible process: TCC's Full Disk Access grant
-         for the scheduled jobs rides on /bin/bash, and a python3-rooted job is denied
-         chat.db (verified on 2026-10-13). No `exec`, so bash stays the parent. -->
+    <!-- bash must be the launchd job's program: TCC's Full Disk Access grant for the
+         scheduled jobs rides on /bin/bash, and a python3-rooted job is denied chat.db
+         (verified 2026-10-13). The wrapper script keeps bash alive around python3
+         (`bash -c "<one command>"` would exec it away). -->
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>-c</string>
-        <string>/usr/bin/python3 -m health_watchdog</string>
+        <string>{{MINERU_HOME}}/scripts/health_watchdog/run-health-watchdog.sh</string>
     </array>
 
     <key>StartInterval</key>
     <integer>300</integer>
-
-    <key>TimeOut</key>
-    <integer>240</integer>
 
     <key>WorkingDirectory</key>
     <string>{{MINERU_HOME}}</string>
