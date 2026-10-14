@@ -53,21 +53,43 @@ def test_tccd_cpu_needs_sustained_runs():
     assert state["streaks"][evaluate.STREAK_TCCD_CPU] == 0
 
 
-def test_memory_incident_numbers_are_critical_with_top_rss():
-    finding = evaluate.evaluate_memory(snapshot(swap_total_mb=10240, swap_used_mb=9420, memory_free_percent=8),
-                                       ["OrbStack Helper (pid 5) 8.5 GB"])
+def test_memory_incident_numbers_are_critical_with_top_rss_after_sustained_runs():
+    state = default_state()
+    incident = snapshot(swap_total_mb=10240, swap_used_mb=9420, memory_free_percent=8)
+    for _ in range(config.MEMORY_SUSTAINED_RUNS - 1):
+        assert evaluate.evaluate_memory(incident, state, []) is None
+    finding = evaluate.evaluate_memory(incident, state, ["OrbStack Helper (pid 5) 8.5 GB"])
     assert finding.severity == Severity.CRITICAL
     assert "swap 92%" in finding.title and "8% memory free" in finding.title
     assert finding.details == ["Top RSS: OrbStack Helper (pid 5) 8.5 GB"]
 
 
-def test_memory_warn_band_and_quiet():
-    assert evaluate.evaluate_memory(snapshot(swap_used_mb=8300), []).severity == Severity.WARN
-    assert evaluate.evaluate_memory(snapshot(swap_used_mb=7000), []) is None
-    assert evaluate.evaluate_memory(SystemSnapshot(), []) is None
+def test_memory_hysteresis_holds_between_clear_and_warn_bars():
+    state = default_state()
+    warn = snapshot(swap_used_mb=8300)        # 81%: above WARN
+    between = snapshot(swap_used_mb=7700)     # 75%: between CLEAR (70) and WARN (80)
+    clear = snapshot(swap_used_mb=7000)       # 68%: below CLEAR
+    for _ in range(config.MEMORY_SUSTAINED_RUNS):
+        finding = evaluate.evaluate_memory(warn, state, [])
+    assert finding.severity == Severity.WARN
+    assert evaluate.evaluate_memory(between, state, []).severity == Severity.WARN  # still latched
+    assert evaluate.evaluate_memory(clear, state, []) is None
+    assert evaluate.evaluate_memory(between, state, []) is None  # released, not re-latched
+    assert evaluate.evaluate_memory(SystemSnapshot(), state, []) is None
 
 
-def test_load_sustained_warn_then_critical():
+def test_swap_flapping_across_warn_line_sends_one_message():
+    state = default_state()
+    messages = 0
+    for run, fraction in enumerate((0.79, 0.81, 0.79, 0.81, 0.79, 0.81)):
+        snap = SystemSnapshot(swap_total_mb=4096, swap_used_mb=4096 * fraction, memory_free_percent=60)
+        finding = evaluate.evaluate_memory(snap, state, [])
+        decision = decide_alerts([finding] if finding else [], state, NOW + run * 300)
+        messages += 1 if (decision.to_send or decision.recovered) else 0
+    assert messages == 1
+
+
+def test_load_sustained_warn_then_critical_with_hysteresis():
     state = default_state()
     warn = snapshot(load_5m=12.0)
     for _ in range(config.LOAD_SUSTAINED_RUNS - 1):
@@ -77,6 +99,8 @@ def test_load_sustained_warn_then_critical():
     for _ in range(config.LOAD_SUSTAINED_RUNS - 1):
         assert evaluate.evaluate_load(critical, state, []).severity == Severity.WARN
     assert evaluate.evaluate_load(critical, state, []).severity == Severity.CRITICAL
+    assert evaluate.evaluate_load(snapshot(load_5m=9.0), state, []).severity == Severity.WARN  # 0.9x: latched
+    assert evaluate.evaluate_load(snapshot(load_5m=7.0), state, []) is None  # 0.7x: released
 
 
 def test_disk_thresholds():
@@ -117,6 +141,30 @@ def test_hung_jobs_finding_escalates_on_sigkill_survivors():
     assert stuck.severity == Severity.CRITICAL and "survived SIGKILL" in stuck.details[1]
     dry = evaluate.hung_jobs_finding(KillReport([candidate], dry_run=True))
     assert dry.title.startswith("Would kill")
+    # Every pid already a known survivor: nothing happened, no action finding.
+    assert evaluate.hung_jobs_finding(KillReport([candidate], dry_run=False, known_survivors=[100, 101])) is None
+
+
+def test_survivor_realert_cadence_is_one_critical_per_cooldown():
+    state = default_state()
+    sent = []
+    for run in range(6):
+        standing = evaluate.survivors_finding([4242])
+        decision = decide_alerts([standing], state, NOW + run * 300)
+        sent.append(len(decision.to_send))
+    assert sent == [1, 0, 0, 0, 0, 0]
+    assert standing.severity == Severity.CRITICAL and not standing.action_taken
+    # Cooldown expiry re-alerts; disappearance announces one recovery.
+    assert decide_alerts([standing], state, NOW + config.CRITICAL_COOLDOWN_SECONDS).to_send == [standing]
+    assert decide_alerts([], state, NOW + config.CRITICAL_COOLDOWN_SECONDS + 300).recovered == ["hung_jobs_survivor"]
+    assert evaluate.survivors_finding([]) is None
+
+
+def test_orphaned_browser_finding():
+    finding = evaluate.orphaned_browser_finding(3, killed=[1, 2, 3], survivors=[], dry_run=False)
+    assert finding.severity == Severity.WARN and finding.action_taken and "3 orphaned" in finding.title
+    assert evaluate.orphaned_browser_finding(1, [], [9], dry_run=False).severity == Severity.CRITICAL
+    assert evaluate.orphaned_browser_finding(1, [], [], dry_run=True).title.startswith("Would terminate")
 
 
 # --- cooldown + recovery ----------------------------------------------------------
@@ -147,14 +195,27 @@ def test_escalation_bypasses_cooldown_and_critical_cooldown_is_shorter():
     assert decide_alerts([critical()], state, NOW + 60 + config.CRITICAL_COOLDOWN_SECONDS).to_send == [critical()]
 
 
-def test_recovery_fires_once_and_resets_cooldown():
+def test_warn_recovery_is_silent_and_keeps_cooldown():
     state = default_state()
     decide_alerts([warn()], state, NOW)
     recovered = decide_alerts([], state, NOW + 300)
-    assert recovered.recovered == ["memory"] and recovered.to_send == []
+    assert recovered.recovered == [] and recovered.to_send == []
+    # Re-occurrence inside the cooldown stays quiet; after it, alerts again.
+    assert decide_alerts([warn()], state, NOW + 900).to_send == []
+    assert decide_alerts([warn()], state, NOW + config.WARN_COOLDOWN_SECONDS).to_send == [warn()]
+
+
+def test_critical_recovery_announced_once_per_sent_alert():
+    state = default_state()
+    decide_alerts([critical()], state, NOW)
+    assert decide_alerts([], state, NOW + 300).recovered == ["memory"]
     assert decide_alerts([], state, NOW + 600).recovered == []
-    # A fresh occurrence after recovery alerts immediately even inside the old cooldown.
-    assert decide_alerts([warn()], state, NOW + 900).to_send == [warn()]
+    # Flap back inside the cooldown: suppressed, and its clearing is not re-announced.
+    assert decide_alerts([critical()], state, NOW + 900).to_send == []
+    assert decide_alerts([], state, NOW + 1200).recovered == []
+    # After the cooldown a new alert is sent and its recovery is announced again.
+    assert decide_alerts([critical()], state, NOW + config.CRITICAL_COOLDOWN_SECONDS).to_send == [critical()]
+    assert decide_alerts([], state, NOW + config.CRITICAL_COOLDOWN_SECONDS + 300).recovered == ["memory"]
 
 
 def test_action_findings_always_send_and_never_recover():

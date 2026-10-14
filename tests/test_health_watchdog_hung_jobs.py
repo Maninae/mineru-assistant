@@ -28,15 +28,30 @@ HOURS = 3600
 WATCHDOG_CMD = "/usr/bin/python3 -m health_watchdog"
 
 
+ENGINE_DEFAULT_MARKERS = (
+    "/bin/imsg-firewall", "/bin/imsg-named", "/bin/gog-firewall", "/scripts/boundary_validator.py")
+
+
+@pytest.fixture(autouse=True)
+def engine_defaults(monkeypatch):
+    """Pin the selector's config to engine defaults so a private config file cannot steer tests."""
+    monkeypatch.setattr("health_watchdog.hung_jobs.JOB_COMMAND_MARKERS", ENGINE_DEFAULT_MARKERS)
+    monkeypatch.setattr("health_watchdog.hung_jobs.JOB_MAX_AGE_OVERRIDES_SECONDS", {})
+    monkeypatch.setattr("health_watchdog.hung_jobs.SERVICE_COMMAND_ALLOWLIST",
+                        ("-m landline", "/app/server.py", "/browser/server.py", "Chromium", "cloakbrowser"))
+
+
 def proc(pid, ppid, command, age=0, tty="??", user=USER, cpu=0.0):
     """Shorthand ProcessInfo factory."""
     return ProcessInfo(pid=pid, ppid=ppid, pgid=pid, tty=tty, user=user,
                        etime_seconds=age, cpu_percent=cpu, rss_kb=1000, command=command)
 
 
-def job(suffix, keepalive=False):
-    """Shorthand LaunchdJob factory."""
-    return LaunchdJob(label="%s.%s" % (PREFIX, suffix), keepalive=keepalive, scheduled=not keepalive)
+def job(suffix, keepalive=False, script=None):
+    """Shorthand LaunchdJob factory; `script` is the plist's launched script path."""
+    arguments = ["/bin/bash", script] if script else []
+    return LaunchdJob(label="%s.%s" % (PREFIX, suffix), keepalive=keepalive, scheduled=not keepalive,
+                      program_arguments=arguments)
 
 
 # The 2026-10-13 incident, reconstructed: hung jobs 9-37 h old next to services
@@ -51,10 +66,13 @@ INCIDENT_TABLE = [
     proc(121, 120, "/usr/bin/python3 %s/bin/imsg-firewall chats --json" % HOME, age=12 * HOURS),
     proc(122, 121, "/opt/homebrew/bin/imsg chats --json", age=12 * HOURS),
     # Orphaned job pieces re-parented to launchd (their trigger script died).
+    # 130 is a private helper no plist names: left alone unless the private config adds it.
     proc(130, 1, "/usr/bin/python3 %s/publish-anthology-pages.py" % SCRIPTS, age=20 * HOURS),
     proc(131, 1, "claude --permission-mode bypassPermissions --print "
                  "Read recurring/news-brief.md and execute the job.", age=11 * HOURS),
     proc(132, 1, "/usr/bin/python3 %s/boundary_validator.py --watch" % SCRIPTS, age=30 * HOURS),
+    proc(133, 1, "/usr/bin/python3 %s/some-long-backfill.py" % SCRIPTS, age=5 * HOURS),  # nohup'd by hand
+    proc(134, 1, "/usr/bin/python3 %s/export-journals.py 30" % SCRIPTS, age=8 * HOURS),  # plist script, orphaned
     # KeepAlive services and their trees.
     proc(200, 1, "/usr/bin/python3 -m landline", age=16 * 24 * HOURS),
     proc(201, 200, "claude --permission-mode bypassPermissions --print --output-format stream-json",
@@ -91,9 +109,13 @@ INCIDENT_LAUNCHCTL = {
 }
 
 INCIDENT_JOBS = [
-    job("morning-brief"), job("pre-export-journals"), job("group-members-sweep"), job("news-brief"),
-    job("daily-consolidation"), job("telegram-daemon", keepalive=True), job("webapp", keepalive=True),
-    job("health-watchdog"),
+    job("morning-brief", script=SCRIPTS + "/trigger-morning-brief-claude-code.sh"),
+    job("pre-export-journals", script=SCRIPTS + "/export-journals.py"),
+    job("group-members-sweep", script=SCRIPTS + "/run-group-members-sweep.sh"),
+    job("news-brief", script=SCRIPTS + "/trigger-news-brief-claude-code.sh"),
+    job("daily-consolidation", script=SCRIPTS + "/trigger-daily-consolidation-claude-code.sh"),
+    job("telegram-daemon", keepalive=True), job("webapp", keepalive=True),
+    job("health-watchdog", script=SCRIPTS + "/health_watchdog/run-health-watchdog.sh"),
 ]
 
 
@@ -103,11 +125,25 @@ def select_incident():
 
 def test_selects_every_hung_incident_job_with_its_tree():
     roots = {candidate.root_pid: candidate for candidate in select_incident()}
-    assert set(roots) == {100, 110, 120, 130, 131, 132}
+    assert set(roots) == {100, 110, 120, 131, 132, 134}
     assert roots[100].descendant_pids == [101]
     assert set(roots[120].descendant_pids) == {121, 122}
     assert roots[100].label.endswith("morning-brief")
-    assert roots[130].label is None
+    assert roots[134].label is None
+
+
+def test_private_marker_makes_an_indirect_helper_orphan_killable(monkeypatch):
+    monkeypatch.setattr("health_watchdog.hung_jobs.JOB_COMMAND_MARKERS",
+                        ENGINE_DEFAULT_MARKERS + ("/scripts/publish-anthology-pages.py",))
+    assert 130 in {c.root_pid for c in select_incident()}
+
+
+def test_selector_without_launchctl_still_finds_plist_scripts_by_path():
+    # 120 runs the sweep's inner python directly (its bash wrapper is what the plist
+    # names), so without launchctl it is the one incident job that goes unfound.
+    roots = {c.root_pid for c in select_hung_jobs(INCIDENT_TABLE, {}, INCIDENT_JOBS, SELF_PID, USER)}
+    assert {100, 110, 131, 132, 134} <= roots
+    assert 133 not in roots and 130 not in roots
 
 
 def test_oldest_candidate_comes_first():
@@ -115,7 +151,7 @@ def test_oldest_candidate_comes_first():
     assert ages == sorted(ages, reverse=True)
 
 
-@pytest.mark.parametrize("pid", [200, 201, 210, 220, 221, 222, 300, 301, 310, 400, 500, SELF_PID])
+@pytest.mark.parametrize("pid", [130, 133, 200, 201, 210, 220, 221, 222, 300, 301, 310, 400, 500, SELF_PID])
 def test_services_sessions_and_young_jobs_are_never_selected(pid):
     selected = {p for candidate in select_incident() for p in candidate.all_pids}
     assert pid not in selected
@@ -159,6 +195,29 @@ def test_dry_run_kill_touches_nothing():
     report = kill_job_trees(candidates, dry_run=True)
     assert report.dry_run and report.killed == [] and report.survivors == []
     assert report.candidates == candidates
+
+
+def test_known_survivors_are_skipped_not_resignalled(monkeypatch):
+    sent = []
+    monkeypatch.setattr("health_watchdog.hung_jobs.send_signal", lambda pids, sig: sent.append(list(pids)))
+    monkeypatch.setattr("health_watchdog.hung_jobs.wait_for_exit", lambda pids, grace: [])
+    candidates = [c for c in select_incident() if c.root_pid == 100]
+    report = kill_job_trees(candidates, dry_run=False, skip_pids=[101])
+    assert sent == [[100]] and report.killed == [100] and report.known_survivors == [101]
+    # Every pid already known: nothing is signalled and the report says so.
+    quiet = kill_job_trees(candidates, dry_run=False, skip_pids=[100, 101])
+    assert sent == [[100]] and not quiet.signalled_anything
+
+
+def test_survivor_records_prune_dead_and_reused_pids():
+    from health_watchdog.hung_jobs import prune_survivor_records
+    from health_watchdog.process_table import index_by_pid
+
+    now = 1_000_000.0
+    table = [proc(101, 1, "claude --print", age=9 * HOURS), proc(555, 1, "bash new", age=60)]
+    records = {"101": now - 9 * HOURS + 30, "555": now - 5 * HOURS, "999": now - HOURS, "junk": 1.0}
+    kept = prune_survivor_records(records, index_by_pid(table), now)
+    assert set(kept) == {"101"}  # 555 was reused by a young process, 999 is gone
 
 
 def test_real_kill_reports_survivors_and_killed(monkeypatch):

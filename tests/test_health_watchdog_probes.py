@@ -93,17 +93,43 @@ def test_plist_classification_and_service_labels():
     assert "p.morning-brief" not in labels
 
 
-def test_silent_kill_counting_respects_window():
+def test_silent_kill_counting_respects_window_and_both_kill_lines():
     log = "\n".join([
         "[2026-10-12 21:57:29] Claude silent for 600s, killing process",
         "[2026-10-13 00:26:53] Claude silent for 600s, killing process",
         "[2026-10-13 14:28:28] Claude silent for 600s, killing process",
+        "[2026-10-13 15:10:00] Claude owned-progress silent for 3600s (pipe last-active 4.0s ago) — killing process",
         "[2026-10-13 14:30:00] some other line",
         "[bad stamp] Claude silent for 600s, killing process",
     ])
     now = dt.datetime(2026, 10, 13, 16, 30)
-    assert count_silent_kills(log, now, window_seconds=6 * 3600) == 1
-    assert count_silent_kills(log, now, window_seconds=24 * 3600) == 3
+    assert count_silent_kills(log, now, window_seconds=6 * 3600) == 2
+    assert count_silent_kills(log, now, window_seconds=24 * 3600) == 4
+
+
+def test_job_script_paths_skips_interpreters_and_services():
+    from health_watchdog.plist_inventory import job_script_paths
+
+    jobs = [
+        classify_plist({"Label": "p.a", "StartInterval": 60,
+                        "ProgramArguments": ["/bin/bash", "/w/scripts/trigger-a.sh"]}),
+        classify_plist({"Label": "p.b", "StartInterval": 60,
+                        "ProgramArguments": ["/bin/bash", "-c", "/usr/bin/python3 /w/scripts/export.py 30"]}),
+        classify_plist({"Label": "p.svc", "KeepAlive": True, "ProgramArguments": ["/usr/bin/python3", "/w/app/server.py"]}),
+    ]
+    assert job_script_paths(jobs) == {"/w/scripts/trigger-a.sh", "/w/scripts/export.py"}
+
+
+def test_orphaned_profile_processes_only_when_server_down():
+    from health_watchdog.browser_hygiene import BrowserStatus, orphaned_profile_processes
+
+    table = parse_ps_output(
+        "1 0 1 ?? u 00:01 50.0 1 Chromium --user-data-dir=%s\n"
+        "2 1 2 ?? u 00:01 50.0 1 Chromium Helper --type=renderer --user-data-dir=%s\n"
+        "3 0 3 ?? u 00:01 50.0 1 Chromium --user-data-dir=/elsewhere\n"
+        % (config.BROWSER_PROFILE_DIR, config.BROWSER_PROFILE_DIR))
+    assert [r.pid for r in orphaned_profile_processes(BrowserStatus(server_running=False), table)] == [1, 2]
+    assert orphaned_profile_processes(BrowserStatus(server_running=True), table) == []
 
 
 def test_tab_summaries_use_hosts_only_and_cap():
