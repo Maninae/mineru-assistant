@@ -119,7 +119,8 @@ def decide_alerts(findings: List[Finding], state: Dict[str, Any], now_ts: Option
             currently_active[finding.check_id] = finding.severity.value
         if should_send(finding, last_alert.get(finding.check_id), now_ts):
             decision.to_send.append(finding)
-            last_alert[finding.check_id] = {"ts": now_ts, "severity": finding.severity.value}
+            for check_id in [finding.check_id] + list(finding.also_cools):
+                last_alert[check_id] = {"ts": now_ts, "severity": finding.severity.value}
         else:
             decision.suppressed.append(finding)
 

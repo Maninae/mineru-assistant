@@ -40,6 +40,9 @@ class Finding:
     - details: short supporting lines (top processes, fix text).
     - action_taken: True when the watchdog changed the system (killed a job,
       stopped the browser); such findings bypass cooldowns and never "recover".
+    - also_cools: other check_ids whose cooldown this finding starts when sent
+      (a kill that reports SIGKILL survivors already covers the standing
+      survivor check, so that one must not fire again five minutes later).
     """
 
     check_id: str
@@ -47,3 +50,4 @@ class Finding:
     title: str
     details: List[str] = field(default_factory=list)
     action_taken: bool = False
+    also_cools: List[str] = field(default_factory=list)
