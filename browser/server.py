@@ -259,6 +259,26 @@ class BrowserManager:
         return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
 
     @staticmethod
+    def _open_for(opened_at: Any) -> str:
+        """How long a tab was open ("2d3h", "4h12m", "35m") from its `openedAt` stamp.
+
+        Feeds the tab-close log lines; "?" when the stamp is missing or unparseable.
+        """
+        try:
+            opened = datetime.datetime.fromisoformat(str(opened_at))
+        except ValueError:
+            return "?"
+        seconds = max(0, int((datetime.datetime.now().astimezone() - opened).total_seconds()))
+        days, rest = divmod(seconds, 86400)
+        hours, rest = divmod(rest, 3600)
+        minutes = rest // 60
+        if days:
+            return "%dd%dh" % (days, hours)
+        if hours:
+            return "%dh%dm" % (hours, minutes)
+        return "%dm" % minutes
+
+    @staticmethod
     def _detect_opener_kind(page: Any) -> str:
         """Return 'popup' if the page has a Playwright opener, else 'user'.
 
@@ -411,6 +431,11 @@ class BrowserManager:
         """
         with self._lock:
             snapshot = self._snapshot_tab(target_id)
+            # An explicit close_tab untracks the tab before page.close() fires this
+            # event, so only page-initiated closes (window.close, crash) log here.
+            if not snapshot.get("gone"):
+                logger.info("Tab %s closed by page url=%s open_for=%s", target_id,
+                            snapshot.get("url"), self._open_for(snapshot.get("openedAt")))
             self._tabs.pop(target_id, None)
             self._tab_meta.pop(target_id, None)
             cdp = self._cdp_sessions.pop(target_id, None)
@@ -919,6 +944,8 @@ class BrowserManager:
             # Capture BEFORE cleanup so the SSE 'closed' event carries
             # the enriched dict.
             snapshot = self._snapshot_tab(target_id)
+            logger.info("Closed tab %s (explicit close) url=%s open_for=%s", target_id,
+                        snapshot.get("url"), self._open_for(snapshot.get("openedAt")))
 
             self._tabs.pop(target_id, None)
             self._tab_meta.pop(target_id, None)
