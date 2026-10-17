@@ -74,7 +74,7 @@ Current grant status on this install: `TOOLS.local.md`.
 
 **Quick pattern:** `open` -> `snapshot` (get refs) -> `act` (click/type/scroll) -> `screenshot` (verify)
 
-**Debugging 500 errors:** Historically `bin/browser` swallowed HTTP 500 response bodies - retry with direct `curl` to see actual errors. This is now fixed, but if you ever see opaque 500s, drop down to `curl` to read `e.read()` directly. Direct POSTs need `-H "Authorization: Bearer $(cat {{MINERU_HOME}}/cache/browser-server.token)"`.
+**Opaque 500s:** drop down to direct `curl` to read the response body. Direct POSTs need `-H "Authorization: Bearer $(cat {{MINERU_HOME}}/cache/browser-server.token)"`.
 
 ## Google Workspace (gog-firewall)
 

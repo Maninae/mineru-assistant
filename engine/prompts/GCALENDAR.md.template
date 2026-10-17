@@ -52,6 +52,7 @@ Unlike Gmail (where MCP can't write, so writes stay on the CLI), **MCP Calendar 
 | `respond_to_event` | RSVP to an invite | `eventId`, `responseStatus` (`accepted`/`declined`/`tentative`), `calendarId`, `responseComment` |
 | `suggest_time` | Find free slots | `attendeeEmails` (use `["primary"]` for {{USER_NAME}} alone, or real emails), `startTime`, `endTime`, `durationMinutes`, `preferences: {startHour, endHour, excludeWeekends, pageSize}`, `timeZone` |
 | `list_calendars` | List accessible calendars | `pageSize`, `pageToken` |
+| `search_events` | Semantic search, **primary calendar only** (no `calendarId`; personal events are not on primary, so use `list_events` + `fullText` with `calendarId`) | `query`, `pageSize` |
 
 ---
 
