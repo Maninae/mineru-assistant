@@ -12,7 +12,7 @@ The system rotates through 3 topic clusters:
 | 2 | Tech & AI | Major labs + broader landscape (agentic, new labs/models), regulation, CV/perception research |
 | 3 | Energy & Climate | Solar, batteries, EVs, nuclear, wind, grid/storage, EPA, climate |
 
-Rotation is continuous — no regard for day of week. State tracked in `briefs_news/rotation-state.json`.
+Rotation is continuous — no regard for day of week. State tracked in `briefs_news/rotation-state.json`; its `last_cluster` is 0-indexed (0 = Day 1, 1 = Day 2, 2 = Day 3).
 
 ---
 
@@ -101,7 +101,7 @@ Search via gog-firewall (per the GMAIL.md rule — the Gmail MCP connector is re
 - If a body comes back redacted (`firewall_blocked`, now rare), skip that newsletter this run and still mark it read in Step 6.
 
 For each unread digest email:
-1. Fetch the full body: `{{MINERU_HOME}}/bin/gog-firewall gmail thread get <threadId> --json`
+1. Fetch the full body: `{{MINERU_HOME}}/bin/gog-firewall gmail thread get <threadId> --plain` (decoded, readable; `--json` is only for scripting)
 2. Extract the 2-3 most interesting bullet points / headlines
 3. Note the newsletter section name (e.g. a per-topic sub-newsletter)
 

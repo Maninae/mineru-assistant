@@ -23,8 +23,10 @@ the distillation RULES have exactly one source of truth.
 Before anything else, load the full memory dump for context. This is **required** - read the entire output without truncation or skimming.
 
 ```bash
-MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp)
+MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp); echo "$MEMORY_DUMP"
 ```
+
+Note the printed path: shell variables do not persist across tool calls, so later steps (including the cleanup) must use this literal path.
 
 Read the entire file at `$MEMORY_DUMP`. It may be large; that's expected. This gives you full context on {{PERSONA_NAME}}'s memories and {{USER_NAME}}'s world:
 - Who people are (household, family, friends)
@@ -44,7 +46,13 @@ YESTERDAY=$(date -v-1d '+%Y-%m-%d')
 python3 {{MINERU_HOME}}/scripts/extract-cc-sessions.py --since "$YESTERDAY"
 ```
 
-**If nothing new was extracted** — the script's final line is `Extracted 0 session(s)` (or every session line says `Skip ... (already extracted)`), or stderr says `No CC project dirs found`: no sessions to consolidate. Skip to Step 4 (there may still be a journal entry, and a Telegram file to fold in per below). The script never prints a "NO_FILES" sentinel — judge by the lines above.
+The scheduled trigger script has usually run this extraction already, so a re-run here printing `Skip ... (already extracted)` means the session files already exist, not that there are none. The session files on disk are the source of truth:
+
+```bash
+ls memory/daily/${YESTERDAY}_*.md 2>/dev/null | grep -v "_telegram.md"
+```
+
+**If that lists nothing**: no sessions to consolidate. Skip to Step 4 (there may still be a journal entry, and a Telegram file to fold in per below).
 
 **If files are listed**: Read each file, then proceed to Step 3.
 
@@ -188,6 +196,7 @@ Days with NO consolidated file are the only surviving record of those sessions �
 # SAFETY (incident 2026-08-05): $MEMORY_DUMP is EMPTY in a fresh shell — env vars do
 # NOT persist across separate tool calls — and `trash ""` trashes the CURRENT directory,
 # i.e. the whole {{MINERU_HOME}} workspace. Guard so only a real temp file is ever trashed.
+MEMORY_DUMP="<the literal path printed in Step 1>"
 [ -n "$MEMORY_DUMP" ] && [ -f "$MEMORY_DUMP" ] && trash "$MEMORY_DUMP" || echo "cleanup skipped: MEMORY_DUMP unset/not-a-file"
 ```
 

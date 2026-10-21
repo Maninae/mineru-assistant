@@ -50,7 +50,7 @@ Unlike Gmail (where MCP can't write, so writes stay on the CLI), **MCP Calendar 
 | `update_event` | Update an event (partial) | `eventId` (required); `calendarId`, any content field, `addedAttendees: [{email}]`, `removedAttendeeEmails`, `notificationLevel` |
 | `delete_event` | Delete an event | `eventId`, `calendarId`, `notificationLevel` |
 | `respond_to_event` | RSVP to an invite | `eventId`, `responseStatus` (`accepted`/`declined`/`tentative`), `calendarId`, `responseComment` |
-| `suggest_time` | Find free slots | `attendeeEmails` (use `["primary"]` for {{USER_NAME}} alone, or real emails), `startTime`, `endTime`, `durationMinutes`, `preferences: {startHour, endHour, excludeWeekends, pageSize}`, `timeZone` |
+| `suggest_time` | Find free slots | `attendeeEmails` (for {{USER_NAME}} alone use `["primary", "{{PERSONAL_CALENDAR_ID}}"]`: `["primary"]` alone misses personal events and reports busy hours as free; add real emails for others), `startTime`, `endTime`, `durationMinutes`, `preferences: {startHour, endHour, excludeWeekends, pageSize}`, `timeZone` |
 | `list_calendars` | List accessible calendars | `pageSize`, `pageToken` |
 | `search_events` | Semantic search, **primary calendar only** (no `calendarId`; personal events are not on primary, so use `list_events` + `fullText` with `calendarId`) | `query`, `pageSize` |
 
@@ -126,7 +126,7 @@ mcp__claude_ai_Google_Calendar__list_events
 **Find a free 30-min slot for {{USER_NAME}} this week (weekdays, 9–5):**
 ```
 mcp__claude_ai_Google_Calendar__suggest_time
-  attendeeEmails:  ["primary"]
+  attendeeEmails:  ["primary", "{{PERSONAL_CALENDAR_ID}}"]
   startTime:       "2026-06-29T00:00:00"
   endTime:         "2026-07-04T00:00:00"
   durationMinutes: 30

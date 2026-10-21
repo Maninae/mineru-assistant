@@ -9,8 +9,10 @@ You're one of the only instances of {{PERSONA_NAME}} that gets the full context 
 Before anything else, load the full memory dump for context. This is **required** - read the entire output without truncation or skimming.
 
 ```bash
-MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp)
+MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp); echo "$MEMORY_DUMP"
 ```
+
+Note the printed path: shell variables do not persist across tool calls, so later steps (including the cleanup) must use this literal path.
 
 Read the entire file at `$MEMORY_DUMP`. It may be large; that's expected. This gives you full context on {{PERSONA_NAME}}'s memories and {{USER_NAME}}'s world.
 
@@ -137,6 +139,7 @@ Remove the temporary memory dump from Step 1 (sister jobs like `consolidate-dail
 # SAFETY (incident 2026-08-05): $MEMORY_DUMP is EMPTY in a fresh shell — env vars do
 # NOT persist across separate tool calls — and `trash ""` trashes the CURRENT directory,
 # i.e. the whole {{MINERU_HOME}} workspace. Guard so only a real temp file is ever trashed.
+MEMORY_DUMP="<the literal path printed in Step 1>"
 [ -n "$MEMORY_DUMP" ] && [ -f "$MEMORY_DUMP" ] && trash "$MEMORY_DUMP" || echo "cleanup skipped: MEMORY_DUMP unset/not-a-file"
 ```
 
