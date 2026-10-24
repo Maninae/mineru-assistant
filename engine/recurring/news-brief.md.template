@@ -35,7 +35,7 @@ This:
 Read the raw results file:
 - `briefs_news/raw/YYYY-MM-DD.json` (today's date)
 
-Note which cluster was fetched (stored in the JSON).
+Note which cluster was fetched (stored in the JSON). Shape: `{date, fetched_at, cluster, cluster_index, queries: [{query, results: [{title, url, description, age}]}]}`.
 
 ## Step 3: Deduplication
 
@@ -76,7 +76,7 @@ Pick **TOP 3 stories** that best represent today's cluster focus.
   - @sung.kim.mw (https://www.threads.net/@sung.kim.mw) — Sung Kim
   - @omarsar0 (https://www.threads.net/@omarsar0) — Elvis Saravia (DAIR.AI)
 
-  If a snapshot returns an empty or login-walled feed, note it and move on — do not block the brief.
+  Open and snapshot every account even if an earlier one was login-walled, and report each account's result separately. If a snapshot returns an empty or login-walled feed, note it and move on — do not block the brief.
 - **ALSO READ: `briefs_news/raw/YYYY-MM-DD-research.json`** (fetched only on Day 2 by `fetch-research.sh` — the file does NOT exist on Days 1 or 3; don't hunt for it) — contains:
   - HuggingFace Daily Papers (community upvoted, highest signal)
   - Reddit r/MachineLearning (top discussions, paper commentary)
@@ -101,7 +101,7 @@ Search via gog-firewall (per the GMAIL.md rule — the Gmail MCP connector is re
 - If a body comes back redacted (`firewall_blocked`, now rare), skip that newsletter this run and still mark it read in Step 6.
 
 For each unread digest email:
-1. Fetch the full body: `{{MINERU_HOME}}/bin/gog-firewall gmail thread get <threadId> --plain` (decoded, readable; `--json` is only for scripting)
+1. Fetch the full body: `{{MINERU_HOME}}/bin/gog-firewall gmail thread get <threadId> --plain --full` (decoded, readable, untruncated; `--json` is only for scripting)
 2. Extract the 2-3 most interesting bullet points / headlines
 3. Note the newsletter section name (e.g. a per-topic sub-newsletter)
 

@@ -43,6 +43,12 @@ msearch query "that appointment we booked last spring" --pretty
 
 ---
 
+## Shell gotcha: a leading `=`
+
+The Bash tool runs zsh, which expands a word starting with `=` as a command path. A separator like `echo ====` fails with `=== not found` and aborts the rest of the command. Use `echo ---` or quote it: `echo "===="`.
+
+---
+
 ## Seeing the screen (screenshots)
 
 Principle: look at the actual pixels, not a text account of them. For any GUI, render, or computer-control work, capture and read the image before judging. The Read tool renders PNG/JPG, so capture, then read; crop and upscale 3x for detail.

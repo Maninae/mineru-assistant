@@ -65,7 +65,7 @@ tags: [gmail, cli, reference, google-workspace]
 **Default to `--plain` whenever you just need to read email.** It prints decoded, human-readable output — message IDs, headers, bodies, attachment lists — with zero parsing. Reaching for `--json` + hand-written Python to read a thread is the #1 recurring footgun: you guess the schema, get `None` back, and retry. Don't. `--plain` exists for exactly this.
 
 - `gmail search <q> --plain` → TSV, one row per thread: `ID⇥DATE⇥FROM⇥SUBJECT⇥LABELS⇥THREAD`, after a `# Next page:` line and a header row. Grab thread IDs with `awk -F'\t' 'NR>2{print $1}'`.
-- `gmail thread get <threadId> --plain` → one `=== Message N/M: <msgId> ===` block per message, each with From/To/Subject/Date, the decoded body, and an `Attachments:` list. This is also where you read the `<msgId>` you reply to.
+- `gmail thread get <threadId> --plain --full` → one `=== Message N/M: <msgId> ===` block per message, each with From/To/Subject/Date, the decoded body, and an `Attachments:` list. Without `--full`, each body is cut to about 500 characters and ends in `... [truncated]`. This is also where you read the `<msgId>` you reply to.
 - `gmail get <msgId> --plain` → the same readable form for a single message.
 
 **Use `--json` only when you need to extract fields programmatically** (loop over IDs, pipe to jq). The firewall **reshapes** the raw Gmail API — it does NOT return the API's native shape. Invariants across every command:
