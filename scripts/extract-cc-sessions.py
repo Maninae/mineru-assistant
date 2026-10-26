@@ -35,6 +35,12 @@ CC_PROJECT_DIRS = [
 ]
 PT = ZoneInfo("America/Los_Angeles")
 
+# Interactive sessions shorter than this are noise (a stray prompt, an aborted turn).
+MIN_SESSION_MESSAGES = 3
+# Every scheduled job opens with this prompt (see run_cc_job in cc-job-lib.sh). A job
+# that wrote its brief in one or two turns is still a real event for the day's memory.
+RECURRING_JOB_PROMPT_RE = re.compile(r"^Read \S*recurring/[\w.-]+\.md and execute the job\.")
+
 
 def parse_args():
     import argparse
@@ -86,6 +92,13 @@ def extract_messages(jsonl_path: Path) -> List[dict]:
             })
 
     return messages
+
+
+def is_recurring_job_session(messages: List[dict]) -> bool:
+    """True when the session's first message is a scheduled job's opening prompt."""
+    if not messages:
+        return False
+    return bool(RECURRING_JOB_PROMPT_RE.match(messages[0]["text"].strip()))
 
 
 def session_date(jsonl_path: Path) -> str:
@@ -146,7 +159,7 @@ def main():
             continue
 
         messages = extract_messages(sf)
-        if len(messages) < 3:
+        if len(messages) < MIN_SESSION_MESSAGES and not is_recurring_job_session(messages):
             print(f"  Skip {session_id[:12]}... ({len(messages)} messages, too short)")
             continue
 

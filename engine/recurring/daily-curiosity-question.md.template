@@ -6,14 +6,15 @@ You are {{PERSONA_NAME}} running a scheduled job: **Daily Curiosity Question** (
 
 ---
 
-## Read the Memory Dump
+## Load the Memory Map
+
+`MEMORY.md` is already in your context. Print the annotated memory tree (one line per file with its `description:`) and read it in full; it is the map you hunt for gaps in. Open individual files as you go, and use `{{MINERU_HOME}}/bin/msearch keyword "<topic>" --pretty` to check whether something is already covered. Do not run `concat-memory.py`: the full dump is ~700 KB and the tree plus targeted reads is enough.
 
 ```bash
-DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp)
-cat "$DUMP"
+bash {{MINERU_HOME}}/scripts/generate-memory-tree.sh {{MINERU_HOME}}
 ```
 
-Read all of it. Also read `briefs_curiosity/asked.jsonl` to see what's been asked before — don't repeat topics, and don't ask about the same domain (people, food, work) as yesterday.
+Also read `briefs_curiosity/asked.jsonl` to see what's been asked before — don't repeat topics, and don't ask about the same domain (people, food, work) as yesterday.
 
 ## Pick a Topic
 
@@ -25,7 +26,7 @@ Scan for something **referenced but unexplained** — a person with no profile, 
 2. **Read the exact `target_file` you would write the answer into, end to end — this is the decisive gate.** The answer often already lives there. (Failure mode to avoid: a "what's your regular game night like?" question goes out even though a file like `memory/hobbies/poker.md` already documents the stakes, the regular players, and the venue — because the job anchored on a peripheral file (e.g. `memory/friends/circle.md`) and never opened the hobby file it was cross-linked to.) If the target file already covers the topic, it is NOT a gap — repick.
 3. **Follow cross-links.** If a file references another with `[[...]]` or names a sibling file, open it before concluding the topic is undocumented.
 4. For people, also check `memory/people/` subdirectories directly.
-5. **Never guess names or details.** If the dump mentions someone without a full name, search daily logs and memory files. If you can't confirm the name, skip the topic.
+5. **Never guess names or details.** If a file mentions someone without a full name, search daily logs and memory files. If you can't confirm the name, skip the topic.
 
 **Skip these:**
 - Things already documented in memory
@@ -42,16 +43,6 @@ Write the question to `briefs_curiosity/question-YYYY-MM-DD.md` with `> **⬜ UN
 ```bash
 python3 {{MINERU_HOME}}/scripts/deliver-output.py {{MINERU_HOME}}/briefs_curiosity/question-YYYY-MM-DD.md
 echo '{"date": "YYYY-MM-DD", "topic": "brief-tag", "target_file": "memory/path/file.md", "answered": false}' >> {{MINERU_HOME}}/briefs_curiosity/asked.jsonl
-```
-
-Then remove the temporary memory dump from the first step (sister jobs like `consolidate-daily-memories` and `memory-dedup` do the same):
-
-```bash
-# SAFETY (incident 2026-08-05): $DUMP is EMPTY in a fresh shell — env vars do NOT
-# persist across separate tool calls — and `trash ""` trashes the CURRENT directory,
-# i.e. the whole {{MINERU_HOME}} workspace. Guard so only a real temp file is ever trashed;
-# if the var is empty/missing, skip (the /var/folders temp file is OS-reaped anyway).
-[ -n "$DUMP" ] && [ -f "$DUMP" ] && trash "$DUMP" || echo "cleanup skipped: DUMP unset/not-a-file"
 ```
 
 See `recurring/README.md` — delivery contract.

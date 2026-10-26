@@ -9,7 +9,7 @@ implementation (headless-Claude backend, single distillation prompt at
 `mineru_cli/memory_ops/prompts/consolidate_distiller.md`). This template
 should be refactored to CALL that verb for the distillation step, so
 this recurring job and the CLI share ONE implementation. Sketch:
-  - Shell pre-work stays (memory dump, extract-cc-sessions, journal load).
+  - Shell pre-work stays (extract-cc-sessions, journal load).
   - Distillation step becomes: `mineru memory consolidate --date "$YESTERDAY"`.
   - Shell post-work stays (auto-tag, tag-index rebuild, cleanup, git commit),
     or moves into the verb over time.
@@ -18,22 +18,21 @@ the distillation RULES have exactly one source of truth.
 -->
 
 
-## Step 1: Load Memory Context (MANDATORY)
+## Step 1: Load Memory Context
 
-Before anything else, load the full memory dump for context. This is **required** - read the entire output without truncation or skimming.
+`MEMORY.md` is already in your context (CLAUDE.md imports it), so you know the household, the active projects, and what matters. Add the map of the structured memory, then look things up as you need them instead of reading everything:
 
 ```bash
-MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp); echo "$MEMORY_DUMP"
+bash {{MINERU_HOME}}/scripts/generate-memory-tree.sh {{MINERU_HOME}}
 ```
 
-Note the printed path: shell variables do not persist across tool calls, so later steps (including the cleanup) must use this literal path.
+That prints the annotated memory tree: one line per file with its `description:`. Read it in full. While consolidating, when a session names a person, place, or project, open that file from the tree or search for it:
 
-Read the entire file at `$MEMORY_DUMP`. It may be large; that's expected. This gives you full context on {{PERSONA_NAME}}'s memories and {{USER_NAME}}'s world:
-- Who people are (household, family, friends)
-- Active projects and priorities
-- What matters and what's noise
+```bash
+{{MINERU_HOME}}/bin/msearch keyword "<name or topic>" --pretty
+```
 
-**Do not skip or skim this step.** The memory context helps you make intelligent consolidation decisions.
+Do not run `concat-memory.py` here: the full dump is ~700 KB, and the tree plus targeted lookups gives the same consolidation decisions at a fraction of the context.
 
 ## Step 2: Find Session Files
 
@@ -190,15 +189,6 @@ for f in memory/daily/*_*.md; do
 done
 ```
 Days with NO consolidated file are the only surviving record of those sessions — leave those files alone and flag them in the report instead.
-
-**2. Remove the temporary memory dump:**
-```bash
-# SAFETY (incident 2026-08-05): $MEMORY_DUMP is EMPTY in a fresh shell — env vars do
-# NOT persist across separate tool calls — and `trash ""` trashes the CURRENT directory,
-# i.e. the whole {{MINERU_HOME}} workspace. Guard so only a real temp file is ever trashed.
-MEMORY_DUMP="<the literal path printed in Step 1>"
-[ -n "$MEMORY_DUMP" ] && [ -f "$MEMORY_DUMP" ] && trash "$MEMORY_DUMP" || echo "cleanup skipped: MEMORY_DUMP unset/not-a-file"
-```
 
 **Only clean up after confirming the consolidated file was written successfully.**
 

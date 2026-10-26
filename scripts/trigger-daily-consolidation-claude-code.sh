@@ -30,7 +30,8 @@ setup_logging "daily-consolidation"
 # Pre-export Apple Notes journals — skip if a recent export is on disk.
 EXPORT_DIR="${MINERU_JOURNAL_EXPORTS_DIR:-$WORKSPACE/journal_exports}"
 export MINERU_JOURNAL_EXPORTS_DIR="$EXPORT_DIR"
-RECENT_EXPORTS=$(find "$EXPORT_DIR" -maxdepth 1 -name "*.txt" -mmin -180 2>/dev/null | wc -l | tr -d ' ')
+# -L: the exports dir is a symlink into the profile; without it find sees 0 files and re-exports nightly.
+RECENT_EXPORTS=$(find -L "$EXPORT_DIR" -maxdepth 1 -name "*.txt" -mmin -180 2>/dev/null | wc -l | tr -d ' ')
 if [ "$RECENT_EXPORTS" -gt 0 ]; then
   echo "$(date): Found $RECENT_EXPORTS recent journal exports (< 3 hours old) — skipping re-export."
 else
