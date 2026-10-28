@@ -14,11 +14,11 @@ tags: [calendar, gcal, mcp, reference, google-workspace]
 | Goal | Use | Why |
 |------|-----|-----|
 | **Everything** — list, get, search, create, update, delete, respond, free/busy | **MCP Calendar tools** (`mcp__claude_ai_Google_Calendar__*`) | Native, structured JSON, available in every {{PERSONA_NAME}} run (incl. headless crons), full read **and** write scopes. This is the default for all calendar work. |
-| **Fallback** — *only* when an MCP call returns an **auth error** (connector token lapsed) | **`gog-firewall calendar` CLI** | Uses gog's own long-lived OAuth, which survives independently of the claude.ai connector. Keeps cron jobs alive when the MCP token expires. |
+| **Fallback** — *only* when an MCP call returns an **auth error** (connector token lapsed) or a **quota error** | **`gog-firewall calendar` CLI** | Uses gog's own long-lived OAuth, which survives independently of the claude.ai connector. Keeps cron jobs alive when the MCP token expires. |
 
 Unlike Gmail (where MCP can't write, so writes stay on the CLI), **MCP Calendar handles writes fine** — create/update/delete/respond all work. So calendar is MCP-first across the board.
 
-**When you hit the fallback:** if a calendar MCP call fails with an authentication/authorization error, (1) fall back to the equivalent `gog-firewall calendar` command for this run, and (2) note that {{USER_NAME}} should run `claude mcp login "claude.ai Google Calendar"` in an interactive session to restore the connector. Don't silently drop the calendar — degrade to gog.
+**When you hit the fallback:** if a calendar MCP call fails with an authentication/authorization error, (1) fall back to the equivalent `gog-firewall calendar` command for this run, and (2) note that {{USER_NAME}} should run `claude mcp login "claude.ai Google Calendar"` in an interactive session to restore the connector. A quota error ("quota exhausted") takes the same fallback with no re-login. Don't silently drop the calendar — degrade to gog.
 
 ---
 
@@ -135,9 +135,9 @@ mcp__claude_ai_Google_Calendar__suggest_time
 
 ---
 
-## Fallback: `gog-firewall calendar` (only on MCP auth error)
+## Fallback: `gog-firewall calendar` (only on MCP auth or quota error)
 
-The full gog calendar surface still works via gog's own OAuth. Use it **only** when an MCP call returns an auth/authorization error, then tell {{USER_NAME}} to re-login the connector. Tool path: `{{MINERU_HOME}}/bin/gog-firewall`.
+The full gog calendar surface still works via gog's own OAuth. Use it **only** when an MCP call returns an auth/authorization or quota error; after an auth error, tell {{USER_NAME}} to re-login the connector. Tool path: `{{MINERU_HOME}}/bin/gog-firewall`.
 
 ```bash
 # List a window (accepts --from/--to RFC3339-or-date, or --days N, or --today/--tomorrow/--week)

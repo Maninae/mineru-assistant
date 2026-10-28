@@ -98,7 +98,7 @@ The report is the **primary output** of this job — a durable, organized synthe
 
 **Write to:** `briefs_consolidation/weekly-YYYY-MM-DD.md` — today's date (the Monday the job ran), same format as the existing weekly files there.
 
-### Cardinal rule (borrowed from the monthly consolidation)
+### Cardinal rule
 
 **Preserve completeness of meaningful work. A detail that took real work to produce must never be silently dropped.** Distillation of *phrasing* is fine and welcome — condense wording, cut filler, collapse repeated context, drop chit-chat. Distillation of *substance* is not: every thread you enumerated in Step 3.5 must be accounted for, either updated into a distilled memory file in Step 4 or preserved here in the report.
 
@@ -133,7 +133,7 @@ Once the report file is written, reply in one short paragraph: path to the repor
 
 ## Step 7: Clean Up the Memory Dump
 
-Remove the temporary memory dump from Step 1 (sister jobs like `consolidate-daily-memories` and `memory-dedup` do the same):
+Remove the temporary memory dump from Step 1 (`memory-dedup` does the same):
 
 ```bash
 # SAFETY (incident 2026-08-05): $MEMORY_DUMP is EMPTY in a fresh shell — env vars do
