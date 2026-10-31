@@ -23,7 +23,7 @@ mcp__claude_ai_Google_Calendar__list_events
 ```
 Query whatever horizons make sense — past week, past month, upcoming events. Events are returned under the `events` field as structured JSON (no jq piping).
 
-**Fallback (only on MCP auth error):** `{{MINERU_HOME}}/bin/gog-firewall calendar events {{PERSONAL_CALENDAR_ID}} --from <date> --to <date>` — then flag that {{USER_NAME}} should run `claude mcp login "claude.ai Google Calendar"`. (Full reference: `prompts/GCALENDAR.md`.)
+**Fallback (only on MCP auth or quota error):** `{{MINERU_HOME}}/bin/gog-firewall calendar events {{PERSONAL_CALENDAR_ID}} --from <date> --to <date>` — after an auth error (not quota), flag that {{USER_NAME}} should run `claude mcp login "claude.ai Google Calendar"`. (Full reference: `prompts/GCALENDAR.md`.)
 
 Build a comprehensive picture with deep understanding: What happened over the last 30 days? Where is {{USER_NAME}} this year?
 

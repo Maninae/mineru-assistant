@@ -43,7 +43,7 @@ mcp__claude_ai_Google_Calendar__list_events
 ```
 Events are returned under the `events` field as structured JSON. Read fields directly (no jq piping). If `nextPageToken` is present, page through with `pageToken`.
 
-**Fallback (only if the MCP call returns an auth error):** use the CLI, then note that {{USER_NAME}} should run `claude mcp login "claude.ai Google Calendar"`:
+**Fallback (only if the MCP call returns an auth or quota error):** use the CLI; after an auth error (not quota), note that {{USER_NAME}} should run `claude mcp login "claude.ai Google Calendar"`:
 ```bash
 {{MINERU_HOME}}/bin/gog-firewall calendar events {{PERSONAL_CALENDAR_ID}} --from "YYYY-MM-DD" --to "YYYY-MM-DD" --json
 ```

@@ -84,7 +84,7 @@ Current grant status on this install: `TOOLS.local.md`.
 
 ## Google Workspace (gog-firewall)
 
-**Authenticated** (via `gog`) with: Gmail, Drive, Contacts, Docs, Sheets. **Calendar is MCP-primary** (`mcp__claude_ai_Google_Calendar__*`) with `gog-firewall calendar` as the auth-error fallback - see `prompts/GCALENDAR.md`. The primary account email lives in `TOOLS.local.md`.
+**Authenticated** (via `gog`) with: Gmail, Drive, Contacts, Docs, Sheets. **Calendar is MCP-primary** (`mcp__claude_ai_Google_Calendar__*`) with `gog-firewall calendar` as the auth- or quota-error fallback - see `prompts/GCALENDAR.md`. The primary account email lives in `TOOLS.local.md`.
 
 **Full path:** `{{MINERU_HOME}}/bin/gog-firewall`
 
@@ -92,7 +92,7 @@ Current grant status on this install: `TOOLS.local.md`.
 
 **One-liners to remember:**
 - For **Gmail**, **`gog-firewall` for read AND write** (the Gmail MCP connector is retired here: auth lapses constantly, no send tool). Details in `prompts/GMAIL.md`.
-- For **Calendar**, MCP is primary (read **and** write) via `mcp__claude_ai_Google_Calendar__*`; `gog-firewall calendar` is the fallback - used only when an MCP call returns an auth error. See `prompts/GCALENDAR.md`.
+- For **Calendar**, MCP is primary (read **and** write) via `mcp__claude_ai_Google_Calendar__*`; `gog-firewall calendar` is the fallback - used only when an MCP call returns an auth or quota error. See `prompts/GCALENDAR.md`.
 
 Sheets/Drive/Contacts/Docs still go through `gog-firewall` directly - see `gog-firewall --help` for those subcommands.
 
