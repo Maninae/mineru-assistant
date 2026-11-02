@@ -127,7 +127,6 @@ def handle_feeds_index(_match: re.Match, _query: Dict) -> Tuple[int, Dict[str, s
             "dirs": feed["dirs"],
             # Sidebar section label; config.parse_feed_entry defaults it.
             "group": feed.get("group", "Feeds"),
-            "answerable": bool(feed.get("answerable", False)),
             **summary,
         })
     return json_response({"feeds": rows}, cache_seconds=5)
@@ -189,7 +188,6 @@ def handle_brief_detail(match: re.Match, _query: Dict) -> Tuple[int, Dict[str, s
         logger.warning("brief read refused (errno %s)", read_error.errno)
         return error_response(404, "not found")
     title, tldr = feeds_module.extract_title_and_tldr(text)
-    feed_entry = FEED_BY_ID.get(feed_id) or {}
     return json_response({
         "feed_id": feed_id,
         "filename": filename,
@@ -198,8 +196,8 @@ def handle_brief_detail(match: re.Match, _query: Dict) -> Tuple[int, Dict[str, s
         "mtime": stat.st_mtime,
         "size": stat.st_size,
         "markdown": text,
-        # Answer composer inputs: the feed opts in, line 1 carries the state.
-        "answerable": bool(feed_entry.get("answerable", False)),
+        # Note composer inputs: every .md served here takes notes; line 1 carries the state.
+        "notes_enabled": True,
         "answer_status": brief_answers.classify_answer_status(text),
     })
 
@@ -243,6 +241,9 @@ def handle_library(match: re.Match, _query: Dict) -> Tuple[int, Dict[str, str], 
         "mime": MIME_TYPES.get(extension, "application/octet-stream"),
         "size": stat.st_size,
         "mtime": stat.st_mtime,
+        # Note composer inputs (POST .../answer): .md only; status from line 1.
+        "notes_enabled": extension == ".md",
+        "answer_status": None,
     }
     if kind == "markdown":
         # Client renders markdown; inline the text so the UI stays snappy.
@@ -261,6 +262,7 @@ def handle_library(match: re.Match, _query: Dict) -> Tuple[int, Dict[str, str], 
             # "papers.md".
             document_title, _ = feeds_module.extract_title_and_tldr(metadata["markdown"])
             metadata["title"] = document_title or target.stem
+            metadata["answer_status"] = brief_answers.classify_answer_status(metadata["markdown"])
         else:
             logger.info(
                 "library: markdown %s exceeds inline cap (%d > %d), serving via raw_url",
@@ -275,6 +277,7 @@ def handle_library(match: re.Match, _query: Dict) -> Tuple[int, Dict[str, str], 
                     head_bytes = head_fh.read(feeds_module.TLDR_SCAN_BYTES)
                 head_text = head_bytes.decode("utf-8", errors="replace")
                 document_title, _ = feeds_module.extract_title_and_tldr(head_text)
+                metadata["answer_status"] = brief_answers.classify_answer_status(head_text)
             except OSError as head_error:
                 logger.warning("library markdown head-scan refused (errno %s)", head_error.errno)
                 document_title = ""

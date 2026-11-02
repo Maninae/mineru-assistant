@@ -16,9 +16,10 @@
  * The SHELL_CACHE version suffix is the cache-bust key: bump it whenever
  * SHELL_ASSETS changes so old clients drop the stale cache on activate.
  * v9: answer composer in the reader (inbox.js + components.css).
+ * v10: composer split into answer_composer.js; notes on every markdown file.
  */
 
-const SHELL_CACHE = 'mineru-shell-v9';
+const SHELL_CACHE = 'mineru-shell-v10';
 const SHELL_ASSETS = [
   '/',
   '/static/css/tokens.css',
@@ -27,6 +28,7 @@ const SHELL_ASSETS = [
   '/static/js/api.js',
   '/static/js/theme.js',
   '/static/js/search.js',
+  '/static/js/answer_composer.js',
   '/static/js/inbox.js',
   '/static/js/library.js',
   '/static/js/pulse.js',

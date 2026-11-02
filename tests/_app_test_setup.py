@@ -57,7 +57,7 @@ class SyntheticWorkspace:
     modules to walk it instead of the real workspace.
 
     Layout inside the tempdir:
-        <tmp>/briefs_alpha/       - a fake feed with the id "alpha" (answerable)
+        <tmp>/briefs_alpha/       - a fake feed with the id "alpha"
         <tmp>/briefs_beta/        - a fake feed with the id "beta"
         <tmp>/reports/            - library source "reports"
         <tmp>/creations/          - library source "creations"
@@ -109,9 +109,8 @@ class SyntheticWorkspace:
 
         # Build the synthetic registry: two brief feeds.
         synthetic_registry: List[Dict] = [
-            # alpha takes answer notes (POST .../answer); beta stays read-only.
             {"id": "alpha", "dirs": ["briefs_alpha"],
-             "display_name": "Alpha", "emoji": "A", "accent": "a", "answerable": True},
+             "display_name": "Alpha", "emoji": "A", "accent": "a"},
             {"id": "beta", "dirs": ["briefs_beta"],
              "display_name": "Beta", "emoji": "B", "accent": "b"},
         ]

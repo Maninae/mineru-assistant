@@ -36,6 +36,7 @@ from config import (
     TEXT_EXTENSIONS,
 )
 import feeds as feeds_module
+from brief_answers import classify_answer_status
 
 
 logger = logging.getLogger(__name__)
@@ -260,6 +261,7 @@ def scan_briefs_for_query(
                 "snippet": snippet,
                 "mtime": brief_mtime,
                 "matched_in": MATCH_TIER_LABEL[tier],
+                "answer_status": classify_answer_status(body_head),
                 "_tier": tier,
             })
     return hits, files_budget, truncated
@@ -310,6 +312,7 @@ def scan_library_for_query(
                 "snippet": snippet,
                 "mtime": mtime,
                 "matched_in": MATCH_TIER_LABEL[tier],
+                "answer_status": classify_answer_status(body_head) if extension == ".md" else None,
                 "_tier": tier,
             })
     return hits, files_budget, truncated

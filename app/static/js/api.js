@@ -50,7 +50,12 @@
     return response.json();
   }
 
-  async function apiPost(path, body) {
+  // options.timeoutMs (optional): abort the request after that many ms; the
+  // thrown error then carries `status: 0` and `timedOut: true`.
+  async function apiPost(path, body, options) {
+    const timeoutMs = options && options.timeoutMs;
+    const controller = (timeoutMs && typeof AbortController === 'function') ? new AbortController() : null;
+    const timer = controller ? window.setTimeout(function () { controller.abort(); }, timeoutMs) : null;
     let response;
     try {
       response = await fetch(path, {
@@ -58,12 +63,17 @@
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body || {}),
+        signal: controller ? controller.signal : undefined,
       });
     } catch (networkError) {
-      const err = new Error('Offline or unreachable.');
+      const timedOut = !!(controller && controller.signal.aborted);
+      const err = new Error(timedOut ? 'Request timed out.' : 'Offline or unreachable.');
       err.status = 0;
+      err.timedOut = timedOut;
       err.path = path;
       throw err;
+    } finally {
+      if (timer) window.clearTimeout(timer);
     }
     if (!response.ok) throw apiError(response.status, path);
     return response.json();

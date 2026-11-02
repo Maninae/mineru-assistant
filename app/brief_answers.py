@@ -1,8 +1,8 @@
-"""Answer notes on "answerable" briefs: line-1 status markers + one append write.
+"""Reader notes on any markdown file the app shows: line-1 markers + one append write.
 
-A brief in a feed flagged `answerable: true` (see config.parse_feed_entry) can
-take answers from the reader. Its first line is its state, one of three
-blockquote markers (the convention the curiosity-question job writes):
+Every `.md` the app serves (feed briefs and library `.md` files) can take a
+note from the reader. A file whose line 1 is one of three blockquote markers
+(the convention the curiosity-question job writes) is a question with a state:
 
     > **⬜ UNANSWERED**                       open
     > **📝 ANSWERED · to file**               answered here, waiting for a job to file it
@@ -11,11 +11,14 @@ blockquote markers (the convention the curiosity-question job writes):
 `append_answer_note` is the web app's ONLY write into the workspace (everything
 else it writes lives under <state>/). Its scope is deliberately narrow:
 
-- Append-only: the existing body is kept byte-for-byte except line 1, which
-  flips UNANSWERED -> ANSWERED · to file. Nothing is ever deleted or rewritten.
-- Refuses files whose line 1 is not a marker, and files already filed.
-- Atomic (same-dir temp file + os.replace) and keeps the original file mode.
-- Path safety (feed flag, allowlist, `.md` suffix) is the HTTP layer's job:
+- Append-only: the existing body is kept byte-for-byte except line 1.
+- Marker file (any of the three): line 1 becomes `📝 ANSWERED · to file` and the
+  note is labelled `Answer`. A note on a filed question re-opens it, which is
+  how corrections reach memory on the next filing run.
+- No marker: the note (labelled `Note`) is appended and nothing else changes.
+- Refuses only files that are not valid UTF-8 (cannot be reproduced byte-for-byte).
+- Atomic (same-dir temp file + os.replace), keeps the original mode and mtime.
+- Path safety (allowlist, `.md` suffix, dot-files) is the HTTP layer's job:
   see brief_answer_endpoint.py. This module trusts the path it is handed.
 
 Python 3.9-compatible. Stdlib only.
@@ -47,12 +50,12 @@ MAX_ANSWER_BODY_BYTES = 16384
 APPEND_LOCK = threading.Lock()
 
 
+NOTE_LABEL_ANSWER = "Answer"
+NOTE_LABEL_PLAIN = "Note"
+
+
 class BriefNotAnswerableError(Exception):
-    """Line 1 of the brief is not one of the answer-status markers."""
-
-
-class BriefAlreadyFiledError(Exception):
-    """The brief's answer was already filed into memory; no more notes."""
+    """The file is not valid UTF-8, so it cannot be rewritten safely."""
 
 
 def classify_answer_status(markdown_text: str) -> Optional[str]:
@@ -96,26 +99,23 @@ def format_answer_stamp(now: datetime) -> str:
     return f"{stamp} {zone_name}" if zone_name else stamp
 
 
-def format_answer_note(answer_text: str, now: datetime) -> str:
-    """The markdown block appended to the brief: rule, stamped heading, answer."""
-    return f"\n\n---\n\n**💬 Answer · {format_answer_stamp(now)}**\n\n{answer_text}\n"
+def format_answer_note(answer_text: str, now: datetime, label: str = NOTE_LABEL_ANSWER) -> str:
+    """The markdown block appended to the file: rule, stamped `Answer`/`Note` heading, text."""
+    return f"\n\n---\n\n**💬 {label} · {format_answer_stamp(now)}**\n\n{answer_text}\n"
 
 
-def append_answer_note(brief_path: Path, answer_text: str, now: datetime) -> str:
-    """Append one answer note to `brief_path` and return the new status.
+def append_answer_note(brief_path: Path, answer_text: str, now: datetime) -> Optional[str]:
+    """Append one note to `brief_path` and return the resulting answer status.
 
     Args:
-        brief_path: an already-validated brief file (see module docstring).
+        brief_path: an already-validated `.md` file (see module docstring).
         answer_text: output of validate_answer_text.
         now: timezone-aware local time for the stamp (`datetime.now().astimezone()`).
     Returns:
-        STATUS_PENDING_FILING, always.
+        STATUS_PENDING_FILING when line 1 was a marker, None when it was not.
     Raises:
-        BriefNotAnswerableError: line 1 is not a marker.
-        BriefAlreadyFiledError: line 1 is the filed marker.
+        BriefNotAnswerableError: the file is not valid UTF-8 (left untouched).
 
-    - UNANSWERED flips to ANSWERED · to file; a pending file keeps its marker
-      and simply gains another note.
     - The file's mode and mtime are preserved (the brief keeps its original date).
     - Trailing whitespace is trimmed so exactly one blank line precedes the
       `---` (which also keeps the rule from turning the last paragraph into a
@@ -127,24 +127,24 @@ def append_answer_note(brief_path: Path, answer_text: str, now: datetime) -> str
         except UnicodeDecodeError as decode_error:
             # Never rewrite a file we cannot reproduce byte-for-byte.
             raise BriefNotAnswerableError(f"{brief_path}: not valid UTF-8") from decode_error
-        status = classify_answer_status(original_text)
-        if status is None:
-            raise BriefNotAnswerableError(str(brief_path))
-        if status == STATUS_FILED:
-            raise BriefAlreadyFiledError(str(brief_path))
+        previous_status = classify_answer_status(original_text)
 
-        updated_text = original_text
-        if status == STATUS_UNANSWERED:
+        if previous_status is None:
+            new_status = None
+            updated_text = original_text.rstrip() + format_answer_note(answer_text, now, NOTE_LABEL_PLAIN)
+        else:
+            # Any marker (even filed) becomes pending: the new answer still needs filing.
+            new_status = STATUS_PENDING_FILING
             remainder = original_text.split("\n", 1)[1] if "\n" in original_text else ""
-            updated_text = MARKER_PENDING_FILING + "\n" + remainder
-        updated_text = updated_text.rstrip() + format_answer_note(answer_text, now)
+            updated_text = (MARKER_PENDING_FILING + "\n" + remainder).rstrip()
+            updated_text += format_answer_note(answer_text, now, NOTE_LABEL_ANSWER)
 
         original_stat = brief_path.stat()
         write_text_atomically_keeping_mode(brief_path, updated_text, stat.S_IMODE(original_stat.st_mode))
-        # Keep the question's original mtime: feeds sort and the Today list key on it,
-        # and an answer must not make an old question look like it just landed.
+        # Keep the file's original mtime: feeds sort and the Today list key on it,
+        # and a note must not make an old brief look like it just landed.
         os.utime(str(brief_path), ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
-    return STATUS_PENDING_FILING
+    return new_status
 
 
 def write_text_atomically_keeping_mode(target_path: Path, text: str, file_mode: int) -> None:

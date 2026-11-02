@@ -53,19 +53,15 @@ class FeedRegistryLoaderTest(unittest.TestCase):
         self.assertEqual(registry, [{
             "id": "pet", "dirs": ["briefs_pet"], "display_name": "pet",
             "emoji": "", "accent": "muted", "group": config.FEED_DEFAULT_GROUP,
-            "answerable": False,
         }])
 
-    def test_answerable_requires_json_true(self):
+    def test_legacy_answerable_key_is_ignored(self):
+        # Notes are on for every feed now; an old operator file may still carry the flag.
         user_file = self.write_json("feeds.json", {"feeds": [
             {"id": "yes", "dirs": ["briefs_yes"], "answerable": True},
-            {"id": "string", "dirs": ["briefs_string"], "answerable": "true"},
-            {"id": "one", "dirs": ["briefs_one"], "answerable": 1},
-            {"id": "absent", "dirs": ["briefs_absent"]},
         ]})
         registry = config.load_feed_registry(user_file, config.BUNDLED_DEFAULT_FEEDS_FILE)
-        self.assertEqual({feed["id"]: feed["answerable"] for feed in registry},
-                         {"yes": True, "string": False, "one": False, "absent": False})
+        self.assertNotIn("answerable", registry[0])
 
     def test_unsafe_dirs_fail_loud_naming_the_entry(self):
         for bad_dir in ["../etc", "/etc", ".", "./", "cache", "logs", "profiles", "app-state",

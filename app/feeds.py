@@ -4,6 +4,9 @@ Given a feed id, walk its registered dirs, collect every .md file, sort
 newest-first, and page over that list. The seen ledger decorates each item
 with a seen flag so the UI can render unread badges.
 
+Each item also carries `answer_status` (brief_answers.classify_answer_status
+on the same head read, so no second read per file).
+
 Title/TLDR extraction goes through `lib.tldr.extract_title_and_tldr`, which
 is the single source of truth shared with `scripts/deliver-output.py`. The
 web wrapper returns an empty tldr whenever it would repeat the title, so the
@@ -39,6 +42,7 @@ from config import (
     MINERU_HOME,
     TODAY_ITEMS_MAX,
 )
+from brief_answers import classify_answer_status
 
 # `lib/` lives one level above `app/`. To share the TLDR helper with
 # `scripts/deliver-output.py` we bootstrap sys.path here, but anchoring on
@@ -387,6 +391,8 @@ def list_feed_page(
             "mtime": brief_mtime,
             "size": size,
             "seen": display in seen_set,
+            # Line-1 question state from the head already read; null for plain briefs.
+            "answer_status": classify_answer_status(head),
         })
 
     return {
@@ -462,6 +468,7 @@ def collect_today_items_uncached(hours_window: int) -> Tuple[List[Dict], bool]:
                 "tldr": tldr,
                 "preview": preview,
                 "mtime": brief_mtime,
+                "answer_status": classify_answer_status(head),
             })
     # Newest-first across feeds; filename tiebreaker keeps the order stable.
     all_items.sort(key=lambda item: (-item["mtime"], item["feed_id"], item["filename"]))

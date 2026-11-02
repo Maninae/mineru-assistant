@@ -67,6 +67,8 @@ ROUTES: List[Tuple[str, re.Pattern, Callable, bool]] = [
     ("GET", re.compile(r"^/api/search/?$"), handlers.handle_search, False),
     ("POST", re.compile(r"^/api/seen/?$"), handlers.handle_seen_post, True),
     ("POST", re.compile(r"^/api/brief/(?P<feed_id>[^/]+)/(?P<filename>[^/]+)/answer/?$"), brief_answer_endpoint.handle_brief_answer_post, True),
+    # POST-only, so it never meets the GET library route; relpath is one %2F-encoded segment.
+    ("POST", re.compile(r"^/api/library/(?P<source>[A-Za-z0-9_-]+)/(?P<relpath>[^/]+)/answer/?$"), brief_answer_endpoint.handle_library_answer_post, True),
     ("POST", re.compile(r"^/api/unlock/?$"), handlers.handle_unlock, True),
     ("GET", re.compile(r"^/api/push/vapid-key/?$"), push_endpoints.handle_push_vapid_key, False),
     ("POST", re.compile(r"^/api/push/subscribe/?$"), push_endpoints.handle_push_subscribe, True),

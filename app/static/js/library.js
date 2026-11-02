@@ -50,6 +50,7 @@
   const state = {
     source: 'reports',
     relpath: '',
+    noteNotice: null,  // one-shot composer notice for the post-save re-render
   };
 
   function enter() {
@@ -293,6 +294,7 @@
       decorateReaderLinks(body);
       linkifyWorkspacePaths(body);
       container.appendChild(body);
+      if (data.notes_enabled) container.appendChild(buildNoteComposer(data));
     } else if (data.media_kind === 'image') {
       const img = document.createElement('img');
       img.src = data.raw_url;
@@ -345,8 +347,37 @@
       primary: absoluteTime(data.mtime),
       aux: `${humanBytes(data.size)} · ${data.relpath}`,
     };
+    const statusPill = window.MineruAnswerComposer.pillFor(data.answer_status);
+    if (statusPill) subline.statusPill = statusPill;
     window.MineruShell.setReaderHeader(`📄 ${readerTitle}`, subline, []);
     try { scrollAnchor.focus({ preventScroll: true }); } catch (_) { /* older */ }
+  }
+
+  // Notes on library .md files (module: answer_composer.js). After a save,
+  // re-fetch just the file and re-render the reader so the note shows.
+  function buildNoteComposer(data) {
+    const source = state.source;
+    const notice = state.noteNotice;
+    state.noteNotice = null;
+    return window.MineruAnswerComposer.build({
+      kind: 'library',
+      ids: { source: source, relpath: data.relpath },
+      answerStatus: data.answer_status,
+      notice: notice,
+      onSaved: async function () {
+        let refreshed;
+        try {
+          refreshed = await apiGet(`/api/library/${encodeURIComponent(source)}/${encodeURIComponent(data.relpath)}`);
+        } catch (_) {
+          return;  // composer already says "Saved."; the old render stays
+        }
+        if (state.source !== source || state.relpath !== data.relpath) return;
+        state.noteNotice = { text: 'Saved.' };
+        renderFile(refreshed);
+        const readerBody = document.getElementById('reader-body');
+        if (readerBody) readerBody.scrollTop = readerBody.scrollHeight;
+      },
+    });
   }
 
   function openPath(source, relpath, options) {

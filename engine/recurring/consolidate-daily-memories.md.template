@@ -104,6 +104,16 @@ cat "journal_exports/March 27, 2026.txt"
 
 **If no entries exist or the export directory is empty**: That's fine, just proceed. The export may have failed; check `tail -4 logs/pre-export-journals/launchd-stdout.log` for last night's `Done. Exported N entries.` line. `launchd-stderr.log` is append-only and keeps stale errors from past runs, so never treat a traceback there as current unless the file's mtime is from last night.
 
+## Step 4b: Read {{USER_NAME}}'s Notes on Briefs and Reports
+
+From the web app, {{USER_NAME}} can type a note under any brief or report. The app appends it to that markdown file as a timestamped section, `**💬 Note · <Mon D, YYYY, H:MM AM/PM TZ>**` (or `**💬 Answer · ...**` on a curiosity question; those are filed by the curiosity job, skip them here). Find yesterday's notes:
+
+```bash
+grep -rn --include='*.md' -E '^\*\*💬 Note · ' {{MINERU_HOME}}/briefs_*/ {{MINERU_HOME}}/reports/ {{MINERU_HOME}}/creations/ | grep "$(date -v-1d '+%b %-d, %Y')"
+```
+
+For each hit, read the note and the brief it sits under. It is first-person input from {{USER_NAME}} about that artifact (a correction, a reaction, a follow-up he wants), so treat it as high-signal: record it in the consolidated daily memory under a `## {{USER_NAME}}'s Notes` section (what he said, about which brief), update long-term memory files when it changes a fact, and carry any ask into `## Open Items`. Leave the note in the brief file; it is the audit trail. No hits is the normal case.
+
 ## Step 5: Auto-Tag the Consolidated Content
 
 Before writing the file, generate tags for the content - keywords, phrases, concepts, people, projects, decisions, or themes worth indexing.

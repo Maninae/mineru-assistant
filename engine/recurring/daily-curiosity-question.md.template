@@ -24,7 +24,7 @@ Also read `briefs_curiosity/asked.jsonl` to see what's been asked before — don
 awk 'FNR==1 && /ANSWERED · to file/ {print FILENAME}' {{MINERU_HOME}}/briefs_curiosity/question-*.md
 ```
 
-For each file listed (skip this section when there are none):
+A file can appear here more than once over time: a note on an already-filed question (a correction or an addition) sets its marker back to `📝 ANSWERED · to file`, so re-file it, integrating the new note with what is already in memory. For each file listed (skip this section when there are none):
 
 1. Read the question file end to end: the question, then every `💬 Answer` note (there can be more than one; later notes add to or correct earlier ones).
 2. Look up its `target_file` in `briefs_curiosity/asked.jsonl` (match on the date in the filename). Read that memory file end to end before writing.
@@ -72,7 +72,7 @@ A question file's first line is its state, one of three markers:
 
 - `> **⬜ UNANSWERED**` — open.
 - `> **📝 ANSWERED · to file**` — {{USER_NAME}} answered from the web app; the answer sits at the bottom of the question file as a `**💬 Answer · <stamp>**` note and still needs filing into memory (see "File Pending Answers First" above; any session may file it the same way).
-- `> **✅ ANSWERED** · saved to <path>` — filed.
+- `> **✅ ANSWERED** · saved to <path>` — filed. A new note from the web app flips it back to `📝 ANSWERED · to file` so the correction gets filed too.
 
 When {{USER_NAME}} answers a curiosity question in conversation (Telegram daemon, main CC, etc.), that session files the answer into the target memory file and updates **both** co-located markers:
 

@@ -113,19 +113,25 @@ class AppendAnswerNoteTest(unittest.TestCase):
         self.assertLess(result.index("First."), result.index("Second."))
         self.assertIn("First.\n\n---\n\n", result)
 
-    def test_filed_raises_and_leaves_file_alone(self):
-        original = MARKER_FILED_PREFIX + " · saved to memory/x.md\n\n" + QUESTION_BODY
-        self.write(original)
-        with self.assertRaises(brief_answers.BriefAlreadyFiledError):
-            brief_answers.append_answer_note(self.brief_path, "late", FIXED_NOW)
-        self.assertEqual(self.read(), original)
+    def test_filed_reopens_to_pending_and_appends_answer(self):
+        self.write(MARKER_FILED_PREFIX + " · saved to memory/x.md\n\n" + QUESTION_BODY)
+        status = brief_answers.append_answer_note(self.brief_path, "Correction.", FIXED_NOW)
+        self.assertEqual(status, STATUS_PENDING_FILING)
+        result = self.read()
+        self.assertTrue(result.startswith(MARKER_PENDING_FILING + "\n\n🦊"))
+        self.assertNotIn("saved to memory/x.md", result)
+        self.assertIn("**💬 Answer · ", result)
+        self.assertTrue(result.endswith("\n\nCorrection.\n"))
 
-    def test_no_marker_raises_and_leaves_file_alone(self):
+    def test_no_marker_appends_plain_note_and_keeps_line_one(self):
         original = "# Morning brief\n\nRain until noon.\n"
         self.write(original)
-        with self.assertRaises(brief_answers.BriefNotAnswerableError):
-            brief_answers.append_answer_note(self.brief_path, "hi", FIXED_NOW)
-        self.assertEqual(self.read(), original)
+        status = brief_answers.append_answer_note(self.brief_path, "Bring a coat.", FIXED_NOW)
+        self.assertIsNone(status)
+        result = self.read()
+        self.assertTrue(result.startswith(original.rstrip() + "\n\n---\n\n**💬 Note · "))
+        self.assertNotIn("**💬 Answer", result)
+        self.assertTrue(result.endswith("\n\nBring a coat.\n"))
 
     def test_file_mode_preserved(self):
         self.write(MARKER_UNANSWERED + "\n\n" + QUESTION_BODY)

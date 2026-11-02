@@ -37,7 +37,7 @@
     savedListScrollTop: 0,
     markAllInFlight: false,
     inUnifiedInbox: false,
-    answerJustSaved: false,  // one-shot "Saved." on the composer after a save re-render
+    answerNotice: null,  // one-shot composer notice ("Saved." + next action) for the post-save re-render
   };
 
   async function loadFeeds() {
@@ -148,6 +148,7 @@
           feed_id: it.feed_id,
           feed_display_name: it.feed_display_name,
           feed_emoji: it.feed_emoji,
+          answer_status: it.answer_status || null,
         };
       });
       renderMessageList();
@@ -357,9 +358,13 @@
     // (< 6h) unread briefs in the unified inbox — a "just landed" hint that
     // fades as briefs age.
     const ageHours = item.mtime ? (Date.now() / 1000 - item.mtime) / 3600 : Infinity;
-    const tagHtml = (!item.seen && state.inUnifiedInbox && ageHours < 6)
+    const newTagHtml = (!item.seen && state.inUnifiedInbox && ageHours < 6)
       ? `<span class="row-tag tag-alert">New</span>`
       : '';
+    const answeredTagHtml = ANSWERED_STATUSES.indexOf(item.answer_status) >= 0
+      ? `<span class="row-tag tag-info">Answered</span>`
+      : '';
+    const tagHtml = newTagHtml + answeredTagHtml;
 
     row.innerHTML = `
       <span class="row-glyph" aria-hidden="true">${glyphChar}</span>
@@ -475,6 +480,7 @@
     letter.appendChild(body);
     const composer = buildAnswerComposer(data, feedId, item);
     if (composer) letter.appendChild(composer);
+    state.answerNotice = null;  // consumed by this render; never leak to another brief
     readerBody.innerHTML = '';
     readerBody.appendChild(letter);
     try { scrollAnchor.focus({ preventScroll: true }); } catch (_) { /* older */ }
@@ -483,7 +489,7 @@
     const feedLabel = feedMeta ? `${feedMeta.emoji} ${feedMeta.display_name}` : (feedId || 'Brief');
     const readerMtime = (data && data.mtime) || (item && item.mtime) || 0;
     const subline = { primary: feedLabel, aux: absoluteTime(readerMtime) };
-    const answerPill = data.answerable ? ANSWER_STATUS_PILLS[data.answer_status] : null;
+    const answerPill = window.MineruAnswerComposer.pillFor(data.answer_status);
     if (answerPill) subline.statusPill = answerPill;
     // Action cluster — every button here must be functional (no dead
     // affordances). The reference has three circles; we ship the three we
@@ -534,97 +540,75 @@
     window.MineruShell.setReaderHeader(readerTitle, subline, actions);
   }
 
-  // --- Answer composer (briefs in feeds flagged `answerable`) -------------
+  // --- Answer / note composer (module: answer_composer.js) ----------------
   //
-  // Line 1 of an answerable brief is its status marker; the server reports it
-  // as `answer_status`. Saving POSTs the text, the server appends a stamped
-  // note to the file, and we re-open the brief so the note renders in place.
+  // Every markdown brief takes notes (`notes_enabled`). When line 1 is a
+  // status marker the note is an answer and the server flips the marker.
+  // After a save we re-open the brief so the note renders in place.
 
-  const ANSWER_TEXT_MAX_CHARS = 4000;  // mirrors brief_answers.ANSWER_TEXT_MAX_CHARS
-  const ANSWER_STATUS_PILLS = {
-    unanswered: { label: 'Unanswered' },
-    answered_pending_filing: { label: 'Answered · to file', kind: 'info' },
-    answered_filed: { label: 'Filed', kind: 'info' },
-  };
+  const ANSWERED_STATUSES = ['answered_pending_filing', 'answered_filed'];
 
   function buildAnswerComposer(data, feedId, item) {
-    const status = data.answer_status;
-    // No marker on line 1 means the server would 409; show nothing.
-    if (!data.answerable || !status) return null;
-    const composer = document.createElement('div');
-    composer.className = 'answer-composer';
-
-    if (status === 'answered_filed') {
-      const filedNote = document.createElement('p');
-      filedNote.className = 'answer-filed-note';
-      filedNote.textContent = 'Filed into memory.';
-      composer.appendChild(filedNote);
-      return composer;
-    }
-
-    const inputId = 'answer-input-' + Date.now();
-    const label = document.createElement('label');
-    label.className = 'answer-label';
-    label.setAttribute('for', inputId);
-    label.textContent = status === 'unanswered' ? 'Your answer' : 'Add another note';
-
-    const textarea = document.createElement('textarea');
-    textarea.className = 'answer-input';
-    textarea.id = inputId;
-    textarea.rows = 4;
-    textarea.maxLength = ANSWER_TEXT_MAX_CHARS;
-    textarea.placeholder = 'Type your answer…';
-    textarea.setAttribute('autocapitalize', 'sentences');
-
-    const saveButton = document.createElement('button');
-    saveButton.type = 'button';
-    saveButton.className = 'answer-save';
-    saveButton.textContent = 'Save answer';
-
-    const statusLine = document.createElement('p');
-    statusLine.className = 'answer-status';
-    statusLine.setAttribute('aria-live', 'polite');
-    if (state.answerJustSaved) {
-      statusLine.textContent = 'Saved.';
-      state.answerJustSaved = false;
-    }
-
-    saveButton.addEventListener('click', async function () {
-      const text = textarea.value.trim();
-      if (!text) { textarea.focus(); return; }
-      saveButton.disabled = true;
-      textarea.disabled = true;
-      statusLine.textContent = 'Saving…';
-      const path = '/api/brief/' + encodeURIComponent(feedId) + '/'
-        + encodeURIComponent(data.filename) + '/answer';
-      try {
-        await apiPost(path, { text: text });
-      } catch (saveError) {
-        saveButton.disabled = false;
-        textarea.disabled = false;
-        const httpStatus = saveError && saveError.status ? saveError.status : null;
-        statusLine.textContent = httpStatus === 409
-          ? 'Already filed into memory. Reopen the brief to see its state.'
-          : `Couldn't save (${httpStatus ? `HTTP ${httpStatus}` : 'offline'}). Your text is still here.`;
-        return;
-      }
-      state.answerJustSaved = true;
-      loadFeeds();
-      await openBrief(item, { fromHistory: true });
-      state.answerJustSaved = false;  // consumed by the re-render; never leak to another brief
-      const readerBody = document.getElementById('reader-body');
-      if (readerBody) readerBody.scrollTop = readerBody.scrollHeight;
+    if (!data.notes_enabled) return null;
+    return window.MineruAnswerComposer.build({
+      kind: 'brief',
+      ids: { feedId: feedId, filename: data.filename },
+      answerStatus: data.answer_status,
+      notice: state.answerNotice,
+      onSaved: function (response) { return afterAnswerSaved(data, feedId, item, response); },
     });
+  }
 
-    const actionsRow = document.createElement('div');
-    actionsRow.className = 'answer-actions';
-    actionsRow.appendChild(saveButton);
-    actionsRow.appendChild(statusLine);
+  async function afterAnswerSaved(data, feedId, item, response) {
+    const wasQuestion = window.MineruAnswerComposer.isMarkerStatus(data.answer_status);
+    const newStatus = response && 'answer_status' in response ? response.answer_status : data.answer_status;
+    const listItem = findListItem(feedId, data.filename);
+    if (listItem) listItem.answer_status = newStatus;
+    item.answer_status = newStatus;
+    if (listItem) renderMessageList();
+    state.answerNotice = wasQuestion ? buildNextUnansweredNotice(feedId, data.filename) : { text: 'Saved.' };
+    loadFeeds();
+    await openBrief(item, { fromHistory: true });
+    state.answerNotice = null;
+    const readerBody = document.getElementById('reader-body');
+    if (readerBody) readerBody.scrollTop = readerBody.scrollHeight;
+  }
 
-    composer.appendChild(label);
-    composer.appendChild(textarea);
-    composer.appendChild(actionsRow);
-    return composer;
+  function itemFeedId(it) {
+    return it.feed_id || state.currentFeedId;
+  }
+
+  function findListItem(feedId, filename) {
+    return state.items.find(function (it) {
+      return it.filename === filename && itemFeedId(it) === feedId;
+    }) || null;
+  }
+
+  // Next item AFTER the current one in the loaded list order, same feed,
+  // whose line 1 still reads UNANSWERED.
+  function buildNextUnansweredNotice(feedId, filename) {
+    const currentIndex = state.items.findIndex(function (it) {
+      return it.filename === filename && itemFeedId(it) === feedId;
+    });
+    const nextItem = state.items.slice(currentIndex + 1).find(function (it) {
+      return itemFeedId(it) === feedId && it.answer_status === 'unanswered';
+    });
+    if (!nextItem) return { text: 'Saved. No more unanswered in this list.' };
+    return {
+      text: 'Saved.',
+      actionLabel: 'Next unanswered →',
+      onAction: function () { openNextUnanswered(nextItem); },
+    };
+  }
+
+  // Replace (not push) the brief entry so back from the next question lands
+  // on the feed list, same as back from the one just answered.
+  function openNextUnanswered(nextItem) {
+    const feedId = itemFeedId(nextItem);
+    if (window.MineruRouter) {
+      window.MineruRouter.replace({ view: 'brief', feedId: feedId, filename: nextItem.filename });
+    }
+    openBrief(nextItem, { fromHistory: true });
   }
 
   // --- External openers: Today card, search result, linkified path -------
