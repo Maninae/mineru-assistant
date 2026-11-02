@@ -36,6 +36,7 @@ from config import (
     build_allowed_hosts,
     build_allowed_origins,
 )
+import brief_answer_endpoint
 import handlers
 import push_endpoints
 import seen_ledger
@@ -65,6 +66,7 @@ ROUTES: List[Tuple[str, re.Pattern, Callable, bool]] = [
     ("GET", re.compile(r"^/api/today/?$"), handlers.handle_today, False),
     ("GET", re.compile(r"^/api/search/?$"), handlers.handle_search, False),
     ("POST", re.compile(r"^/api/seen/?$"), handlers.handle_seen_post, True),
+    ("POST", re.compile(r"^/api/brief/(?P<feed_id>[^/]+)/(?P<filename>[^/]+)/answer/?$"), brief_answer_endpoint.handle_brief_answer_post, True),
     ("POST", re.compile(r"^/api/unlock/?$"), handlers.handle_unlock, True),
     ("GET", re.compile(r"^/api/push/vapid-key/?$"), push_endpoints.handle_push_vapid_key, False),
     ("POST", re.compile(r"^/api/push/subscribe/?$"), push_endpoints.handle_push_subscribe, True),
@@ -230,7 +232,9 @@ class MineruRequestHandler(http.server.BaseHTTPRequestHandler):
                         self.write_response(*guard_response)
                         return
                     length = int(self.headers.get("Content-Length") or "0")
-                    if length < 0 or length > MAX_JSON_BODY_BYTES:
+                    # A handler may raise its own cap (answer notes); default 4 KiB.
+                    max_body_bytes = getattr(handler, "max_body_bytes", MAX_JSON_BODY_BYTES)
+                    if length < 0 or length > max_body_bytes:
                         status, headers_out, body = error_response(413, "body too large")
                     else:
                         raw_body = self.rfile.read(length) if length else b""

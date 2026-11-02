@@ -905,3 +905,67 @@
   border-radius: var(--radius-md);
   background: white;
 }
+
+/* --- Answer composer (reader, answerable feeds) ---------------------------
+   Sits under the brief body inside .reader-letter. Separated by whitespace,
+   not a rule; the appended answer notes above it already carry `---` rules.
+   Mobile bottom clearance comes from .reader-body's safe-area padding. */
+
+.answer-composer {
+  margin-top: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.answer-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.answer-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: calc(6 * 1.5em + 20px);
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 16px;   /* below 16px iOS Safari zooms the page on focus */
+  line-height: 1.5;
+  resize: vertical;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.answer-input::placeholder { color: var(--text-muted); opacity: 1; }
+.answer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg);
+}
+.answer-input:disabled { opacity: 0.6; }
+.answer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.answer-save {
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.answer-save:disabled { opacity: 0.55; cursor: progress; }
+.answer-status,
+.answer-filed-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.answer-status:empty { display: none; }

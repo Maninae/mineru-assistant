@@ -87,7 +87,7 @@ def read_jobs_list() -> List[Dict]:
 
     Missing file → warning + empty list (a fresh install with no jobs yet).
     Malformed JSON or wrong top-level shape → warning + empty list (fail soft:
-    a bad metadata file must not take down the read-only web app).
+    a bad metadata file must not take down the web app).
     """
     source = registry_source_path()
     if not source.exists():

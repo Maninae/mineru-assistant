@@ -16,6 +16,23 @@ bash {{MINERU_HOME}}/scripts/generate-memory-tree.sh {{MINERU_HOME}}
 
 Also read `briefs_curiosity/asked.jsonl` to see what's been asked before — don't repeat topics, and don't ask about the same domain (people, food, work) as yesterday.
 
+## File Pending Answers First
+
+{{USER_NAME}} can answer questions from the web app: it appends a timestamped `**💬 Answer · <stamp>**` note to the bottom of the question file and flips line 1 to `> **📝 ANSWERED · to file**`. Those answers are waiting for you. Before picking today's topic:
+
+```bash
+awk 'FNR==1 && /ANSWERED · to file/ {print FILENAME}' {{MINERU_HOME}}/briefs_curiosity/question-*.md
+```
+
+For each file listed (skip this section when there are none):
+
+1. Read the question file end to end: the question, then every `💬 Answer` note (there can be more than one; later notes add to or correct earlier ones).
+2. Look up its `target_file` in `briefs_curiosity/asked.jsonl` (match on the date in the filename). Read that memory file end to end before writing.
+3. Integrate the answer into the target file in the file's own voice and structure: fill the placeholder the question pointed at, extend the right section, or add one. Keep the facts exactly as {{USER_NAME}} stated them, including hedges and "not sure" (a plain "nothing comes to mind" is a valid answer; record that the question was asked and closed). Do not copy the timestamp or the `💬 Answer` framing into memory. If the answer belongs somewhere better than `target_file`, use the better file and note the real path when stamping.
+4. Stamp line 1 to `> **✅ ANSWERED** · saved to <path>` and flip the matching `asked.jsonl` entry to `"answered": true`. Leave the appended answer notes in the question file; they are the audit trail.
+
+The nightly consolidation job commits the workspace, so no git step here. Today's question file stays about today's question; do not mention the filing in it.
+
 ## Pick a Topic
 
 Scan for something **referenced but unexplained** — a person with no profile, a hobby with no depth, a tradition with no backstory, a preference with no explanation, a place with no entry.
@@ -51,11 +68,17 @@ See `recurring/README.md` — delivery contract.
 
 ## Answer Tracking (for other sessions)
 
-When {{USER_NAME}} answers a curiosity question in any session (Telegram daemon, main CC, etc.), that session must update **both** co-located markers:
+A question file's first line is its state, one of three markers:
+
+- `> **⬜ UNANSWERED**` — open.
+- `> **📝 ANSWERED · to file**` — {{USER_NAME}} answered from the web app; the answer sits at the bottom of the question file as a `**💬 Answer · <stamp>**` note and still needs filing into memory (see "File Pending Answers First" above; any session may file it the same way).
+- `> **✅ ANSWERED** · saved to <path>` — filed.
+
+When {{USER_NAME}} answers a curiosity question in conversation (Telegram daemon, main CC, etc.), that session files the answer into the target memory file and updates **both** co-located markers:
 
 1. Flip the matching `asked.jsonl` entry to `"answered": true`
-2. Stamp the question file's first line from `> **⬜ UNANSWERED**` to `> **✅ ANSWERED** · saved to <path>`
+2. Stamp the question file's first line to `> **✅ ANSWERED** · saved to <path>`
 
-To find the still-open backlog: `grep -l UNANSWERED briefs_curiosity/question-*.md` (don't trust the jsonl flag alone).
+To find the still-open backlog, test line 1 only (an answer note may contain these words): `awk 'FNR==1 && /UNANSWERED/ {print FILENAME}' briefs_curiosity/question-*.md` (don't trust the jsonl flag alone). Pending-filing answers: the same with `/ANSWERED · to file/`.
 
 **Clearing a backlog with {{USER_NAME}} (the preferred shape):** list the open questions grouped by theme, one line each with the date; then ask them **2-5 at a time per themed cluster**, one cluster per message. File each answer (target file, jsonl flip, header stamp, commit+push) before asking the next cluster. A one-line "nothing comes to mind" is a valid answer and closes the question. Use `msearch` for the lookups while filing.

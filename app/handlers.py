@@ -27,6 +27,7 @@ from config import (
     TODAY_HOURS_MAX,
     TODAY_HOURS_MIN,
 )
+import brief_answers
 import feeds as feeds_module
 import library as library_module
 import pulse as pulse_module
@@ -126,6 +127,7 @@ def handle_feeds_index(_match: re.Match, _query: Dict) -> Tuple[int, Dict[str, s
             "dirs": feed["dirs"],
             # Sidebar section label; config.parse_feed_entry defaults it.
             "group": feed.get("group", "Feeds"),
+            "answerable": bool(feed.get("answerable", False)),
             **summary,
         })
     return json_response({"feeds": rows}, cache_seconds=5)
@@ -187,6 +189,7 @@ def handle_brief_detail(match: re.Match, _query: Dict) -> Tuple[int, Dict[str, s
         logger.warning("brief read refused (errno %s)", read_error.errno)
         return error_response(404, "not found")
     title, tldr = feeds_module.extract_title_and_tldr(text)
+    feed_entry = FEED_BY_ID.get(feed_id) or {}
     return json_response({
         "feed_id": feed_id,
         "filename": filename,
@@ -195,6 +198,9 @@ def handle_brief_detail(match: re.Match, _query: Dict) -> Tuple[int, Dict[str, s
         "mtime": stat.st_mtime,
         "size": stat.st_size,
         "markdown": text,
+        # Answer composer inputs: the feed opts in, line 1 carries the state.
+        "answerable": bool(feed_entry.get("answerable", False)),
+        "answer_status": brief_answers.classify_answer_status(text),
     })
 
 

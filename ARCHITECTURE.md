@@ -32,7 +32,7 @@ The install verb was called `hydrate` before 2026-09-16; the old name still work
 |------|-----------------|
 | `mineru_cli/` | CLI package: verbs, wrappers, profile resolution, install, cron |
 | `browser/` | Playwright browser-automation server |
-| `app/` | read-only, tailnet-only web UI |
+| `app/` | tailnet-only web UI, read-only except answer notes |
 | `bin/`, `bin_shims/` | user-facing shell wrappers |
 | `scripts/` | firewall, delivery, memory tooling, and other helpers |
 | `lib/` | shared library modules |

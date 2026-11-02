@@ -1,12 +1,12 @@
 # Mineru web app — onboarding
 
-Read-only, tailnet-only web UI over the Mineru workspace. A flat, light **three-pane mail client**: on desktop, three persistent columns (folder sidebar | message list | reader); on mobile, a drill-down stack (folders → list → reader). Default theme is `mail` (the legacy `forest`/`ocean`/`warm`/`dark` themes still work — they retint the same shell). Coexists with Telegram. Binds `127.0.0.1:$MINERU_WEBAPP_PORT` (default 5195); tailnet exposure is exclusively via `tailscale serve` (never funnel).
+Tailnet-only web UI over the Mineru workspace, read-only except for answer notes (contract #17). A flat, light **three-pane mail client**: on desktop, three persistent columns (folder sidebar | message list | reader); on mobile, a drill-down stack (folders → list → reader). Default theme is `mail` (the legacy `forest`/`ocean`/`warm`/`dark` themes still work — they retint the same shell). Coexists with Telegram. Binds `127.0.0.1:$MINERU_WEBAPP_PORT` (default 5195); tailnet exposure is exclusively via `tailscale serve` (never funnel).
 
 This file is the onboarding doc for the web app; the module map and security contracts below are authoritative.
 
 ## Hard rules
 
-- READ-ONLY over the workspace. The single writable surface is the state dir (`<state>` below = `$MINERU_APP_STATE_DIR`, default `$MINERU_HOME/app-state`). Any other write path is a bug. Never write under `app/`: in a deployed install it is a symlink into the engine checkout.
+- READ-ONLY over the workspace, with ONE exception: append-only answer notes on briefs in feeds flagged `answerable` (`POST /api/brief/<feed>/<file>/answer`, storage in `brief_answers.py`, scope in Security contract #17). Otherwise the single writable surface is the state dir (`<state>` below = `$MINERU_APP_STATE_DIR`, default `$MINERU_HOME/app-state`). Any other write path is a bug. Never write under `app/`: in a deployed install it is a symlink into the engine checkout.
 - **Python 3.9-compatible**. The launchd target is `/usr/bin/python3` (3.9.6). No `match`, no PEP 604 `X | Y` unions in signatures, no `list[int]` at module scope in annotations that get evaluated at import time. Use `typing.List` / `typing.Optional` / `typing.Dict`.
 - **Stdlib only.** No pip installs. `marked.min.js` is vendored under `static/vendor/` (offline build-time fetch; the served page never reaches the internet).
 - **Never `rm`.** Use `/usr/bin/trash` if you must delete something you created under `app/`.
@@ -29,6 +29,8 @@ Coordinator + modules (each file is one nameable responsibility, kept small on p
 | `search.py` | Backs `/api/search`: substring (never regex) scan of every brief and (optionally) reports/creations, tier-ranked (title > tldr > filename > body), bounded by `SEARCH_BODY_MAX_BYTES` per file and `SEARCH_MAX_FILES_SCANNED` per request. Same short-TTL caching rhythm as the sidebar. |
 | `pulse_launchd.py` | launchd plist discovery, parsing, log-mtime lookup, and the human-schedule string builder. |
 | `pulse_freshness.py` | `JOB_SIGNAL_TABLE` (loaded from the job registry via `launchd_jobs.py`; per-label real artifact source: `newest_in_dir` / `file_mtime` / `neutral`), cadence math, and the `fresh / stale / failed / scheduled / not-scheduled` classifier. Reads the job's REAL output location (e.g. `memory/daily/` for daily-consolidation, the script's own `logs/house-scan/house-scan.log` for house-scan, a `file_mtime` source), not the stdout/stderr log — log rotation would otherwise freeze the mtime and mark healthy jobs as failed. Jobs that legitimately produce no visible artifact (`daemon-watchdog`, `cleanup-retention`) are marked neutral → `scheduled` status. |
+| `brief_answers.py` | Answer notes on answerable briefs: the three line-1 status markers (`⬜ UNANSWERED` / `📝 ANSWERED · to file` / `✅ ANSWERED · saved to …`), answer-text validation, and the one append write (atomic same-dir temp + `os.replace`, original file mode kept, process-wide lock). Pure except that write; no HTTP. |
+| `brief_answer_endpoint.py` | `POST /api/brief/<feed>/<file>/answer` HTTP layer: body cap, feed `answerable` check, path resolution + allowlist + `.md`, 409 mapping, cache invalidation. Sets `handle_brief_answer_post.max_body_bytes` (16 KiB), which the dispatcher reads in place of the global 4 KiB cap. |
 | `seen_ledger.py` | App-private read/seen state at `<state>/seen.json`; atomic writes, FIFO cap at `SEEN_LIST_MAX`, chmod 600. |
 | `unlock_gate.py` | Passphrase gate (`POST /api/unlock`, `GET /lock`, cookie validation, lockout tracker). The app's ONE Keychain access lives here — default service `mineru-webapp-passphrase-hash` / account `mineru`, overridable via `PASSPHRASE_KEYCHAIN_{SERVICE,ACCOUNT}`. See "Security contracts" #12-16. |
 | `push_subscriptions.py` | Web Push subscription store at `<state>/push-subscriptions.json` (0600, atomic-write, endpoint-dedup, FIFO cap `MAX_SUBSCRIPTIONS`). Validates the browser PushSubscription shape (endpoint = https:// or loopback; p256dh/auth base64url in length windows). Never logs endpoints or keys. |
@@ -65,12 +67,13 @@ Reader-back must land on the SAME feed list the brief was opened from, regardles
 
 ## API surface
 
-All GET except one POST:
+All GET except the POSTs listed:
 
 ```
 GET  /api/feeds                              feed registry + unread/latest for the sidebar; each feed object carries a `group` key (sidebar folder grouping, e.g. "Daily"/"System"; feeds without one default to "Feeds")
 GET  /api/feed/<id>?before=<cursor>&limit=N  newest-first page of feed items (cursor is an opaque base64 (mtime,filename) token — echo it back, never parse it); each item carries an additive `preview` field (first real body sentence past the title/TLDR, used for the row's 2-line snippet)
-GET  /api/brief/<feed_id>/<filename>         raw markdown + metadata for one brief
+GET  /api/brief/<feed_id>/<filename>         raw markdown + metadata for one brief; also `answerable` (feed flag) and `answer_status` (`unanswered` | `answered_pending_filing` | `answered_filed` | null, from line 1)
+POST /api/brief/<feed_id>/<filename>/answer  body: {"text": "..."} (1-4000 chars after strip). Answerable feeds only. Appends a stamped `**💬 Answer · <stamp>**` note, flips UNANSWERED → `ANSWERED · to file`. 200 {ok, answer_status, filename, feed_id}; 404 unknown/non-answerable feed or bad path; 400 bad text; 409 not answerable / already filed; 413 body > 16 KiB.
 GET  /api/library/<source>[/<relpath>]       directory listing OR file metadata (reports, creations)
 GET  /raw/library/<source>/<relpath>         raw bytes with correct MIME (never HTML)
 GET  /sandbox/library/<source>/<relpath>     HTML from creations/, served with strict CSP for iframe
@@ -110,8 +113,10 @@ Static: `GET /`, `GET /static/*`, `GET /manifest.webmanifest`, `GET /sw.js`.
 16. **Lockout policy** (OWASP-style exponential backoff): global (single passphrase, single user — NOT per-IP; tailnet IPs are spoofable and per-IP throttling is theatre here). First `LOCKOUT_FAILURES_BEFORE_BACKOFF=3` failures cost nothing (fat-finger grace); after that the window is `LOCKOUT_BASE_SECONDS=5` × 2^k, capped at `LOCKOUT_MAX_SECONDS=3600` (~1h). Persisted to `<state>/unlock-lockout.json` (0600) so a restart does not reset an active brute-force window. Locked-out response is `429` with `Retry-After` and a generic body.
 5. **Brief markdown is sanitized client-side** with DOMPurify (vendored at `static/vendor/purify.min.js`) before any `.innerHTML = …`. See `MineruApi.renderMarkdownSafe` in `static/js/api.js`. CSP is the second line of defense; DOMPurify is the primary one because brief content is AI-generated from external sources (email, calendar, iMessage, news).
 6. No Keychain, no secrets, no tokens. `cache/`, `landline.json`, `memory/` (except the heartbeat-state.json read) are not reachable through any route.
-7. GET handlers are side-effect-free. The lone `POST /api/seen` only writes under `<state>/` and only after the identifier resolves to a real file inside the read allowlist. Ledger caps per-bucket at `SEEN_LIST_MAX = 5000` with FIFO eviction.
+7. GET handlers are side-effect-free. `POST /api/seen` (and the push/unlock POSTs) only write under `<state>/`, and `/api/seen` only after the identifier resolves to a real file inside the read allowlist. The single exception to "writes only under `<state>/`" is the answer endpoint, scoped by #17. Ledger caps per-bucket at `SEEN_LIST_MAX = 5000` with FIFO eviction.
 8. Logs never carry brief contents (only paths and counts).
+
+17. **Answer notes are the app's only workspace write** (`brief_answer_endpoint.py` → `brief_answers.append_answer_note`). Scope, all required: the feed entry has `answerable: true` (the JSON boolean; anything else → the same 404 as a missing file); the filename resolves through `feeds.resolve_brief_path` (inside that feed's own dirs, symlink escapes reject) AND passes `is_path_inside_allowlist`; suffix is `.md`; line 1 is the `⬜ UNANSWERED` or `📝 ANSWERED · to file` marker (no marker, `✅ ANSWERED`, or a file that is not valid UTF-8 → 409, file untouched); dot-prefixed filenames → 404 (the listing hides them too). The write is append-only (only line 1 may change, UNANSWERED → ANSWERED · to file), atomic (same-dir temp + `os.replace`, original mode preserved), and serialized by an in-process lock (there is no cross-process lock: a filing job that rewrites line 1 while a save lands is last-writer-wins, accepted because the job runs once a day and a save is one tap). Caps: body 16 KiB (per-route override of the 4 KiB dispatcher cap), text 4000 chars, NUL rejected. Same write-guards as `/api/seen` (#10) and behind the passphrase gate (#14). Logs carry the path, never the answer text. The answer is markdown rendered back through DOMPurify (#5), like any brief.
 
 ## Configuration
 
@@ -137,7 +142,7 @@ mv ~/.mineru/app/state ~/.mineru/app-state
 
 ## How to add a feed
 
-Feeds are data, not code. Copy `engine/config/feeds.example.json` to `$MINERU_HOME/config/feeds.json` (or set `MINERU_FEEDS_FILE`) and add an entry: `id`, `dirs` (paths relative to `$MINERU_HOME`; absolute paths and `..` are rejected), `display_name`, `emoji`, `accent` (a `tokens.css` accent name), optional `group` (sidebar folder; default "Feeds"). The file REPLACES the bundled `app/feeds.default.json`, so keep the generic feeds you want. Restart the server; the sidebar, `READ_ALLOWLIST`, and `feeds.py` pick it up. To give the job behind it a Pulse card, add it to `$MINERU_HOME/config/launchd-jobs.json` (schema in `app/launchd-jobs.default.json`).
+Feeds are data, not code. Copy `engine/config/feeds.example.json` to `$MINERU_HOME/config/feeds.json` (or set `MINERU_FEEDS_FILE`) and add an entry: `id`, `dirs` (paths relative to `$MINERU_HOME`; absolute paths and `..` are rejected), `display_name`, `emoji`, `accent` (a `tokens.css` accent name), optional `group` (sidebar folder; default "Feeds"), optional `answerable` (default false; `true` shows an answer box under each brief whose line 1 is an answer-status marker, see contract #17; the bundled `curiosity` feed sets it). The file REPLACES the bundled `app/feeds.default.json`, so keep the generic feeds you want. Restart the server; the sidebar, `READ_ALLOWLIST`, and `feeds.py` pick it up. To give the job behind it a Pulse card, add it to `$MINERU_HOME/config/launchd-jobs.json` (schema in `app/launchd-jobs.default.json`).
 
 ## How to add a theme
 

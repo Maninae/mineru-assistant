@@ -165,7 +165,7 @@ def build_allowed_origins(port: int) -> Set[str]:
 # mirrors launchd_jobs.py (first hit wins):
 #   1. $MINERU_FEEDS_FILE, default $MINERU_HOME/config/feeds.json (operator-owned).
 #   2. app/feeds.default.json, the generic engine feeds, bundled next to this module.
-# Schema: {"feeds": [{"id", "dirs", "display_name", "emoji", "accent", "group"}]}.
+# Schema: {"feeds": [{"id", "dirs", "display_name", "emoji", "accent", "group", "answerable"}]}.
 # See engine/config/feeds.example.json.
 # - The user file REPLACES the default list; UI order = file order.
 # - `dirs` are relative to MINERU_HOME and feed READ_ALLOWLIST, so each must sit
@@ -173,6 +173,9 @@ def build_allowed_origins(port: int) -> Set[str]:
 #   anything else raises UnsafeFeedDirError at load time, naming the entry.
 # - Sidebar groups appear in the order they first occur; a feed with no
 #   `group` lands under "Feeds".
+# - `answerable: true` (strictly the JSON boolean) lets the reader append answer
+#   notes to that feed's briefs (POST /api/brief/<id>/<file>/answer, see
+#   brief_answers.py). It is the app's only workspace write; default false.
 FEEDS_FILE = Path(
     os.environ.get("MINERU_FEEDS_FILE", str(MINERU_HOME / "config" / "feeds.json"))
 )
@@ -247,7 +250,8 @@ def parse_feed_entry(raw_entry: object) -> Optional[Dict[str, Any]]:
     Required: `id` (str) and `dirs` (non-empty list of servable relative paths).
     Raises UnsafeFeedDirError when any dir fails feed_dir_rejection_reason.
     Optional with defaults: display_name (= id), emoji (""), accent ("muted"),
-    group (FEED_DEFAULT_GROUP).
+    group (FEED_DEFAULT_GROUP), answerable (False; only the JSON boolean
+    `true` turns it on, so a stray "yes" string never opens the write path).
     """
     if not isinstance(raw_entry, dict):
         logger.warning("feed registry entry is not an object: %r; skipping", raw_entry)
@@ -274,6 +278,7 @@ def parse_feed_entry(raw_entry: object) -> Optional[Dict[str, Any]]:
         "emoji": str(raw_entry.get("emoji") or ""),
         "accent": str(raw_entry.get("accent") or "muted"),
         "group": str(raw_entry.get("group") or FEED_DEFAULT_GROUP),
+        "answerable": raw_entry.get("answerable") is True,
     }
 
 

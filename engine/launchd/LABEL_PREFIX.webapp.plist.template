@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   {{PERSONA_NAME}} web app launchd template — NOT loaded automatically.
-  This runs the read-only tailnet web app persistently so `tailscale serve`
+  This runs the read-mostly tailnet web app persistently so `tailscale serve`
   always has a live backend to proxy. Load only after {{USER_NAME}} approves go-live:
 
     cp {{MINERU_HOME}}/app/deploy/{{LAUNCHD_PREFIX}}.webapp.plist {{USER_HOME}}/Library/LaunchAgents/

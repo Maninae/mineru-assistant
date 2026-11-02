@@ -37,6 +37,7 @@
     savedListScrollTop: 0,
     markAllInFlight: false,
     inUnifiedInbox: false,
+    answerJustSaved: false,  // one-shot "Saved." on the composer after a save re-render
   };
 
   async function loadFeeds() {
@@ -472,6 +473,8 @@
     decorateReaderLinks(body);
     linkifyWorkspacePaths(body);
     letter.appendChild(body);
+    const composer = buildAnswerComposer(data, feedId, item);
+    if (composer) letter.appendChild(composer);
     readerBody.innerHTML = '';
     readerBody.appendChild(letter);
     try { scrollAnchor.focus({ preventScroll: true }); } catch (_) { /* older */ }
@@ -480,6 +483,8 @@
     const feedLabel = feedMeta ? `${feedMeta.emoji} ${feedMeta.display_name}` : (feedId || 'Brief');
     const readerMtime = (data && data.mtime) || (item && item.mtime) || 0;
     const subline = { primary: feedLabel, aux: absoluteTime(readerMtime) };
+    const answerPill = data.answerable ? ANSWER_STATUS_PILLS[data.answer_status] : null;
+    if (answerPill) subline.statusPill = answerPill;
     // Action cluster — every button here must be functional (no dead
     // affordances). The reference has three circles; we ship the three we
     // can actually wire:
@@ -527,6 +532,99 @@
       }),
     ];
     window.MineruShell.setReaderHeader(readerTitle, subline, actions);
+  }
+
+  // --- Answer composer (briefs in feeds flagged `answerable`) -------------
+  //
+  // Line 1 of an answerable brief is its status marker; the server reports it
+  // as `answer_status`. Saving POSTs the text, the server appends a stamped
+  // note to the file, and we re-open the brief so the note renders in place.
+
+  const ANSWER_TEXT_MAX_CHARS = 4000;  // mirrors brief_answers.ANSWER_TEXT_MAX_CHARS
+  const ANSWER_STATUS_PILLS = {
+    unanswered: { label: 'Unanswered' },
+    answered_pending_filing: { label: 'Answered · to file', kind: 'info' },
+    answered_filed: { label: 'Filed', kind: 'info' },
+  };
+
+  function buildAnswerComposer(data, feedId, item) {
+    const status = data.answer_status;
+    // No marker on line 1 means the server would 409; show nothing.
+    if (!data.answerable || !status) return null;
+    const composer = document.createElement('div');
+    composer.className = 'answer-composer';
+
+    if (status === 'answered_filed') {
+      const filedNote = document.createElement('p');
+      filedNote.className = 'answer-filed-note';
+      filedNote.textContent = 'Filed into memory.';
+      composer.appendChild(filedNote);
+      return composer;
+    }
+
+    const inputId = 'answer-input-' + Date.now();
+    const label = document.createElement('label');
+    label.className = 'answer-label';
+    label.setAttribute('for', inputId);
+    label.textContent = status === 'unanswered' ? 'Your answer' : 'Add another note';
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'answer-input';
+    textarea.id = inputId;
+    textarea.rows = 4;
+    textarea.maxLength = ANSWER_TEXT_MAX_CHARS;
+    textarea.placeholder = 'Type your answer…';
+    textarea.setAttribute('autocapitalize', 'sentences');
+
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.className = 'answer-save';
+    saveButton.textContent = 'Save answer';
+
+    const statusLine = document.createElement('p');
+    statusLine.className = 'answer-status';
+    statusLine.setAttribute('aria-live', 'polite');
+    if (state.answerJustSaved) {
+      statusLine.textContent = 'Saved.';
+      state.answerJustSaved = false;
+    }
+
+    saveButton.addEventListener('click', async function () {
+      const text = textarea.value.trim();
+      if (!text) { textarea.focus(); return; }
+      saveButton.disabled = true;
+      textarea.disabled = true;
+      statusLine.textContent = 'Saving…';
+      const path = '/api/brief/' + encodeURIComponent(feedId) + '/'
+        + encodeURIComponent(data.filename) + '/answer';
+      try {
+        await apiPost(path, { text: text });
+      } catch (saveError) {
+        saveButton.disabled = false;
+        textarea.disabled = false;
+        const httpStatus = saveError && saveError.status ? saveError.status : null;
+        statusLine.textContent = httpStatus === 409
+          ? 'Already filed into memory. Reopen the brief to see its state.'
+          : `Couldn't save (${httpStatus ? `HTTP ${httpStatus}` : 'offline'}). Your text is still here.`;
+        return;
+      }
+      state.answerJustSaved = true;
+      loadFeeds();
+      await openBrief(item, { fromHistory: true });
+      state.answerJustSaved = false;  // consumed by the re-render; never leak to another brief
+      const readerBody = document.getElementById('reader-body');
+      if (readerBody) readerBody.scrollTop = readerBody.scrollHeight;
+    });
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'answer-actions';
+    actionsRow.appendChild(saveButton);
+    actionsRow.appendChild(statusLine);
+
+    composer.appendChild(label);
+    composer.appendChild(textarea);
+    composer.appendChild(actionsRow);
+    return composer;
   }
 
   // --- External openers: Today card, search result, linkified path -------

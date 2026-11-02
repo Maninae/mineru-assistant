@@ -15,11 +15,10 @@
  *
  * The SHELL_CACHE version suffix is the cache-bust key: bump it whenever
  * SHELL_ASSETS changes so old clients drop the stale cache on activate.
- * v5: design pass — new type-scale tokens, surface roles, slim landing
- * header, reader compact meta, cadence-grouped pulse, error-card actions.
+ * v9: answer composer in the reader (inbox.js + components.css).
  */
 
-const SHELL_CACHE = 'mineru-shell-v8';
+const SHELL_CACHE = 'mineru-shell-v9';
 const SHELL_ASSETS = [
   '/',
   '/static/css/tokens.css',
