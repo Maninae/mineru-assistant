@@ -5,7 +5,7 @@ tags: [calendar, gcal, mcp, reference, google-workspace]
 
 # GCALENDAR.md — Google Calendar Reference
 
-{{USER_NAME}}'s primary personal calendar is a dedicated personal calendar (the `personal` entry in `connectors.yaml`), not the default Gmail primary calendar. **Always pass the calendar ID explicitly** — the no-ID form silently hits `primary`, which is the wrong calendar for personal events.
+{{USER_NAME}}'s primary personal calendar is a dedicated personal calendar (the `personal` entry in the active profile's `connectors.yaml`, i.e. `active/connectors.yaml`), not the default Gmail primary calendar. **Always pass the calendar ID explicitly** — the no-ID form silently hits `primary`, which is the wrong calendar for personal events.
 
 ---
 

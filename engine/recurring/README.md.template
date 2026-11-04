@@ -12,7 +12,7 @@ This directory holds the instruction markdown files for every scheduled {{PERSON
 | Monthly Financial Checkup | 1st Sunday 9:00 PM | `financial-checkup.md` | `briefs_financial/` |
 | Prompts Alignment | Tue/Fri 10:00 PM | `prompts-alignment.md` | `briefs_prompts_alignment/` |
 | Daily Consolidation (lightweight) | 1:00 AM daily | `consolidate-daily-memories.md` | `memory/daily/` |
-| Weekly Deep Consolidation | Mon 2:27 AM | `weekly-deep-consolidation.md` | `memory/` (in place) |
+| Weekly Deep Consolidation | Mon 2:27 AM | `weekly-deep-consolidation.md` | `briefs_consolidation/` + `memory/` (in place) |
 | Memory Description | 1:30 AM daily | `memory-description-maintenance.md` | `memory/` (in place) |
 | Inbox Triage | Sun 2:00 PM | `inbox-triage.md` | `briefs_inbox/` |
 | Daily Curiosity Question | 11:30 AM daily | `daily-curiosity-question.md` | `briefs_curiosity/` |

@@ -109,7 +109,7 @@ cat "journal_exports/March 27, 2026.txt"
 From the web app, {{USER_NAME}} can type a note under any brief or report. The app appends it to that markdown file as a timestamped section, `**💬 Note · <Mon D, YYYY, H:MM AM/PM TZ>**` (or `**💬 Answer · ...**` on a curiosity question; those are filed by the curiosity job, skip them here). Find yesterday's notes:
 
 ```bash
-grep -rn --include='*.md' -E '^\*\*💬 Note · ' {{MINERU_HOME}}/briefs_*/ {{MINERU_HOME}}/reports/ {{MINERU_HOME}}/creations/ | grep "$(date -v-1d '+%b %-d, %Y')"
+grep -rn --include='*.md' -E '^\*\*💬 Note · ' {{MINERU_HOME}}/briefs_*/ {{MINERU_HOME}}/reports/ {{MINERU_HOME}}/creations/ | grep "$(date -j -f '%Y-%m-%d' "$YESTERDAY" '+%b %-d, %Y')"
 ```
 
 For each hit, read the note and the brief it sits under. It is first-person input from {{USER_NAME}} about that artifact (a correction, a reaction, a follow-up he wants), so treat it as high-signal: record it in the consolidated daily memory under a `## {{USER_NAME}}'s Notes` section (what he said, about which brief), update long-term memory files when it changes a fact, and carry any ask into `## Open Items`. Leave the note in the brief file; it is the audit trail. No hits is the normal case.
