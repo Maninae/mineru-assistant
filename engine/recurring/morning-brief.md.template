@@ -43,6 +43,8 @@ mcp__claude_ai_Google_Calendar__list_events
 ```
 Events are returned under the `events` field as structured JSON. Read fields directly (no jq piping). If `nextPageToken` is present, page through with `pageToken`.
 
+**Then read every other calendar in the Calendar IDs table of `prompts/GCALENDAR.md`** (church, family, any shared calendar listed there) with the same `list_events` call and window, passing each one's `calendarId` explicitly. Merge them into one chronological list; drop an event that duplicates a personal-calendar event.
+
 **Fallback (only if the MCP call returns an auth or quota error):** use the CLI; after an auth error (not quota), note that {{USER_NAME}} should run `claude mcp login "claude.ai Google Calendar"`:
 ```bash
 {{MINERU_HOME}}/bin/gog-firewall calendar events {{PERSONAL_CALENDAR_ID}} --from "YYYY-MM-DD" --to "YYYY-MM-DD" --json
@@ -56,7 +58,7 @@ Events are returned under the `events` field as structured JSON. Read fields dir
 **📅 Tomorrow** — Tomorrow's events only (not 72h). One line per event.
 
 **General:**
-- Include household/partner events if relevant (shared calendar)
+- Label an event's calendar only when it is not the personal one, e.g. `(Family)` or `(Church)` after the event; personal events carry no label.
 - **Only report events that actually appear on the calendar.** If memory/context mentions an event that's not on the calendar, either verify via messages or note it as unconfirmed.
 - No commentary like "light day" or "busy one" — let the list speak for itself.
 
@@ -159,7 +161,7 @@ After delivering the brief, read `creations/README.md` and see what you think. N
 
 ## Preferences
 
-- **Calendar:** Always use {{USER_NAME}}'s personal calendar (`{{PERSONAL_CALENDAR_ID}}`)
+- **Calendar:** {{USER_NAME}}'s personal calendar (`{{PERSONAL_CALENDAR_ID}}`) first, plus every other calendar listed in `prompts/GCALENDAR.md`
 - **Never** use the `primary` (Gmail account) calendar
 - **Location:** {{USER_LOCATION}}
 - **Timezone:** {{USER_TIMEZONE}}

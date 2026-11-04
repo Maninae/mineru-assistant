@@ -44,6 +44,8 @@ def fetch_message_json(message_id: str) -> dict:
         [GOG_BINARY_PATH, "gmail", "get", message_id, "--format", "full", "--json"],
         capture_output=True,
         text=True,
+        # A non-UTF-8 email body must not kill the read; replace bad bytes.
+        errors="replace",
     )
     if result.returncode != 0:
         raise RuntimeError(f"gog failed (exit {result.returncode}): {result.stderr.strip()[:500]}")

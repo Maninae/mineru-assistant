@@ -6,5 +6,5 @@
 set -euo pipefail
 . "$(dirname "$0")/cc-job-lib.sh"
 
-run_cc_job "memory-dedup" "claude-opus-5-5" "recurring/memory-dedup.md" \
+run_cc_job "memory-dedup" "claude-opus-5-5[1m]" "recurring/memory-dedup.md" \
   "briefs_dedup/dedup-*.md"

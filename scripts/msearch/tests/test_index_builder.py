@@ -78,3 +78,12 @@ class TestLoadOrBuild:
         cache.write_text("not valid json{{{")
         index = load_or_build(cache, all_dirs)
         assert len(index.tag_to_files) > 0
+
+    def test_stale_cache_is_overwritten_in_place_without_leftovers(self, all_dirs, tmp_path):
+        cache = tmp_path / "cache.json"
+        cache.write_text(json.dumps({"tag_to_files": {}, "file_to_tags": {}, "all_tags": [], "built_at": 0}))
+        index = load_or_build(cache, all_dirs, max_age=300)
+        assert json.loads(cache.read_text())["built_at"] == index.built_at
+        # The atomic write leaves only the cache itself behind (no temp files).
+        assert [p.name for p in tmp_path.iterdir()] == ["cache.json"]
+

@@ -185,9 +185,16 @@ _Consolidated from N sessions + journal_
 
 After successfully writing the consolidated file:
 
+**Keep marker:** a `_`-file whose YAML frontmatter contains the line `keep: true` is intentionally kept; both steps below skip it. `is_kept` is that check:
+```bash
+is_kept() { awk 'NR==1{if($0!="---")exit 1; next} $0=="---"{exit 1} /^keep:[[:space:]]*true[[:space:]]*$/{found=1; exit 0} END{exit !found}' "$1"; }
+```
+
 **1. Trash the individual session files:**
 ```bash
-trash memory/daily/${YESTERDAY}_*.md
+for f in memory/daily/${YESTERDAY}_*.md; do
+  [ -f "$f" ] && ! is_kept "$f" && trash "$f"
+done
 ```
 
 **1b. Sweep stragglers from earlier days.** Raw `_`-files can escape step 1 when a session's start-time date differs from the night it was extracted (e.g. a 1 AM session extracted during the previous day's run), or when a night's job failed entirely. Trash a straggler ONLY if its day's consolidated file exists:
@@ -195,7 +202,7 @@ trash memory/daily/${YESTERDAY}_*.md
 TODAY=$(date '+%Y-%m-%d')
 for f in memory/daily/*_*.md; do
   d=$(basename "$f" | sed 's/_.*//')
-  [[ "$d" < "$TODAY" ]] && [ -f "memory/daily/$d.md" ] && trash "$f"
+  [[ "$d" < "$TODAY" ]] && [ -f "memory/daily/$d.md" ] && ! is_kept "$f" && trash "$f"
 done
 ```
 Days with NO consolidated file are the only surviving record of those sessions — leave those files alone and flag them in the report instead.
@@ -204,11 +211,10 @@ Days with NO consolidated file are the only surviving record of those sessions �
 
 ## Step 8: Rebuild Tags Index
 
-The tag index (`memory/tags-index.json`) is owned by `msearch`: its `load_or_build` rebuilds and writes the file whenever the on-disk cache is missing or older than `CACHE_TTL_SECONDS` (5 min). After consolidation adds new daily files with new tags, force an immediate rebuild by deleting the cache and running any `msearch` command:
+The tag index (`memory/tags-index.json`) is owned by `msearch`: its `load_or_build` rebuilds and writes the file whenever the on-disk cache is missing or older than `CACHE_TTL_SECONDS` (5 min). After consolidation adds new daily files with new tags, force an immediate rebuild with `--no-cache`, which rewrites the file in place (do not trash or delete it first):
 
 ```bash
-trash {{MINERU_HOME}}/memory/tags-index.json 2>/dev/null || true
-{{MINERU_HOME}}/bin/msearch tags > /dev/null
+{{MINERU_HOME}}/bin/msearch tags --no-cache > /dev/null
 ```
 
 This rescans the **full `memory/` tree** plus `reports/*.md` (msearch indexes the whole tree as of July 2026 — not just `daily/`), extracts frontmatter tags, and rewrites `memory/tags-index.json` with both forward (tag → files) and reverse (file → tags) mappings.

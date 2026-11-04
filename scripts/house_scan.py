@@ -174,10 +174,47 @@ def parse_stats(stats_text: str) -> Tuple[Optional[float], Optional[float], Opti
 # carries no region of its own.
 CITY_FROM_ADDR_RE = re.compile(r",\s*([A-Za-z .]+?),\s*[A-Z]{2}\s*\d{5}")
 
+logger = logging.getLogger("house_scan")
 
-def city_from_address(address: str) -> str:
-    m = CITY_FROM_ADDR_RE.search(address or "")
-    return m.group(1).strip() if m else ""
+
+def known_city_names_from_config(config: Dict[str, Any]) -> List[str]:
+    """Every city name the config knows: the scan list plus the location-gate policy keys."""
+    names = [c["name"] for c in config.get("cities") or [] if c.get("name")]
+    names.extend(((config.get("neighborhood_policy") or {}).get("cities") or {}).keys())
+    return list(dict.fromkeys(names))
+
+
+def city_from_address(address: str, known_cities: Optional[List[str]] = None) -> str:
+    """Return the listing's city, preferring the LAST configured city name in the address.
+
+    Redfin builder-plan cards carry a garbled community prefix in the city slot
+    ("Hackberry Plan, Bdntin Redwood City, CA 94065"), so the city segment is
+    searched for the last whole-word, case-insensitive hit among `known_cities`.
+
+    - The search is confined to the city segment (between the last street comma
+      and ", ST 12345") when that shape parses, so a street named after a
+      configured city ("100 San Carlos Ave, Belmont, ...") never wins.
+    - No configured city found: falls back to the raw parsed segment (so a
+      spillover town like "Pacifica" still reaches the location gate under its
+      own name and is excluded there) and logs the raw address at INFO.
+    """
+    address = address or ""
+    m = CITY_FROM_ADDR_RE.search(address)
+    parsed_segment = m.group(1).strip() if m else ""
+    search_space = parsed_segment or address
+
+    best_city, best_end = "", -1
+    for city in known_cities or []:
+        pattern = r"(?<![A-Za-z])" + re.escape(city) + r"(?![A-Za-z])"
+        for hit in re.finditer(pattern, search_space, flags=re.IGNORECASE):
+            # Last occurrence wins; on a tie (one name inside another) the longer name wins.
+            if hit.end() > best_end or (hit.end() == best_end and len(city) > len(best_city)):
+                best_city, best_end = city, hit.end()
+    if best_city:
+        return best_city
+
+    logger.info("city parse: no configured city in address %r (parsed %r)", address, parsed_segment)
+    return parsed_segment
 
 
 def price_per_sqft(price: Optional[int], sqft: Optional[int]) -> Optional[int]:
@@ -326,8 +363,14 @@ def fetch_city_listings(
 # ---------------------------------------------------------------------------
 
 
-def normalize_listing(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Turn a scraped card into a canonical dict; drop entries with no URL/price."""
+def normalize_listing(
+    raw: Dict[str, Any], known_cities: Optional[List[str]] = None
+) -> Optional[Dict[str, Any]]:
+    """Turn a scraped card into a canonical dict; drop entries with no URL/price.
+
+    `known_cities` (see known_city_names_from_config) lets city_from_address
+    pick the configured city out of a garbled address.
+    """
     href = raw.get("href")
     price = parse_price_usd(raw.get("price"))
     address = (raw.get("address") or "").strip()
@@ -342,7 +385,7 @@ def normalize_listing(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     # search returns its neighbors' listings too), so trust the parsed
     # address's city first — the _scan_city stamp is only a fallback when the
     # address is unparseable.
-    city = city_from_address(address) or raw.get("_scan_city") or ""
+    city = city_from_address(address, known_cities) or raw.get("_scan_city") or ""
     ppsf = price_per_sqft(price, sqft)
     return {
         "url": url,
@@ -820,8 +863,9 @@ def main() -> int:
 
     # Normalize + dedup by URL.
     listings_by_url: Dict[str, Dict[str, Any]] = {}
+    known_cities = known_city_names_from_config(config)
     for raw in all_raw:
-        norm = normalize_listing(raw)
+        norm = normalize_listing(raw, known_cities)
         if not norm:
             continue
         if not passes_basic_filter(norm, config):

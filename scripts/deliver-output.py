@@ -35,6 +35,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -216,6 +217,43 @@ def chunk_message(text: str, limit: int = TELEGRAM_MSG_LIMIT) -> List[str]:
     return chunks
 
 
+# Telegram HTTP 429: retry once after `parameters.retry_after`, capped so a cron never stalls long.
+TELEGRAM_RATE_LIMIT_STATUS = 429
+TELEGRAM_RETRY_AFTER_DEFAULT_SECONDS = 5
+TELEGRAM_RETRY_AFTER_CAP_SECONDS = 60
+
+
+def parse_telegram_retry_after_seconds(error_body: str) -> float:
+    """Return the capped wait from a Telegram 429 body, or the default if absent/unparseable."""
+    try:
+        retry_after = json.loads(error_body).get("parameters", {}).get("retry_after")
+    except (ValueError, AttributeError):
+        retry_after = None
+    if not isinstance(retry_after, (int, float)) or retry_after < 0:
+        return TELEGRAM_RETRY_AFTER_DEFAULT_SECONDS
+    return min(retry_after, TELEGRAM_RETRY_AFTER_CAP_SECONDS)
+
+
+def urlopen_telegram_with_one_rate_limit_retry(req: urllib.request.Request, timeout: int) -> dict:
+    """POST to the Bot API and return the decoded JSON reply.
+
+    - On HTTP 429, sleeps for the reply's `retry_after` (capped) and retries exactly once.
+    - Any other error, or a second failure, propagates as the usual HTTPError / URLError.
+    """
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as rate_limit_error:
+        if rate_limit_error.code != TELEGRAM_RATE_LIMIT_STATUS:
+            raise
+        error_body = rate_limit_error.read().decode("utf-8", errors="replace")
+        wait_seconds = parse_telegram_retry_after_seconds(error_body)
+        print(f"Telegram HTTP 429, retrying once in {wait_seconds}s", file=sys.stderr)
+        time.sleep(wait_seconds)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
 def send_telegram(text: str, token: str, chat_id: str, parse_mode: str = "HTML") -> bool:
     """Send message(s) via Telegram Bot API. Stdlib only — no pip deps."""
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -237,11 +275,10 @@ def send_telegram(text: str, token: str, chat_id: str, parse_mode: str = "HTML")
             headers={"Content-Type": "application/json"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read())
-                if not result.get("ok"):
-                    print(f"Telegram API error: {result}", file=sys.stderr)
-                    return False
+            result = urlopen_telegram_with_one_rate_limit_retry(req, timeout=30)
+            if not result.get("ok"):
+                print(f"Telegram API error: {result}", file=sys.stderr)
+                return False
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
             print(f"Telegram HTTP {e.code}: {body}", file=sys.stderr)
@@ -370,11 +407,10 @@ def send_telegram_photo(
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.loads(resp.read())
-            if not result.get("ok"):
-                print(f"Telegram sendPhoto API error: {result}", file=sys.stderr)
-                return False
+        result = urlopen_telegram_with_one_rate_limit_retry(req, timeout=60)
+        if not result.get("ok"):
+            print(f"Telegram sendPhoto API error: {result}", file=sys.stderr)
+            return False
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
         print(f"Telegram sendPhoto HTTP {e.code}: {detail}", file=sys.stderr)

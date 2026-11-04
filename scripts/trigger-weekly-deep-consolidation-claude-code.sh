@@ -16,7 +16,7 @@ PROMPT="$(cat recurring/weekly-deep-consolidation.md)"
 
 rc=0
 run_with_timeout "$CC_JOB_TIMEOUT_SECONDS" "weekly-deep-consolidation" -- \
-  "$CC_BIN" --permission-mode bypassPermissions --model claude-opus-5-5 --verbose --print \
+  "$CC_BIN" --permission-mode bypassPermissions --model "claude-opus-5-5[1m]" --verbose --print \
   "$PROMPT" || rc=$?
 
 echo "$(date): CC exited with code $rc"

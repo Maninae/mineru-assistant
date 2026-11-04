@@ -49,7 +49,7 @@ from msearch.config import (
     OLLAMA_URL,
     resolve_paths,
 )
-from msearch.index_builder import build_index, load_or_build
+from msearch.index_builder import build_index, load_or_build, save_index_cache
 from msearch.keyword_searcher import search as keyword_search
 from msearch.semantic_ranker import suggest_tags
 
@@ -61,7 +61,7 @@ def main():
                                help="JSON output (default)")
     global_parser.add_argument("--pretty", action="store_true", help="Human-readable output")
     global_parser.add_argument("--workspace", type=str, default=None, help="Override workspace root")
-    global_parser.add_argument("--no-cache", action="store_true", help="Force index rebuild")
+    global_parser.add_argument("--no-cache", action="store_true", help="Force index rebuild (and rewrite the cache)")
     global_parser.add_argument("--timing", action="store_true", help="Print elapsed time per phase")
 
     parser = argparse.ArgumentParser(
@@ -121,6 +121,7 @@ def main():
     t0 = time.monotonic()
     if args.no_cache:
         index = build_index(dirs, root=paths["root"])
+        save_index_cache(paths["cache_path"], index)
     else:
         index = load_or_build(paths["cache_path"], dirs, CACHE_TTL_SECONDS, root=paths["root"])
     timings["index_ms"] = int((time.monotonic() - t0) * 1000)

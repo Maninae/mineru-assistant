@@ -1,6 +1,11 @@
 #!/bin/bash
 # Wrapper for amazon-orders CLI
 # Uses venv at $MINERU_HOME/.venv-amazon
+#
+# The library creates `./output` in the CURRENT directory on every run (even --help),
+# so pin it under cache/. A caller's own --output-dir comes later and still wins.
 
-source "${MINERU_HOME:-$HOME/.mineru}/.venv-amazon/bin/activate"
-exec amazon-orders "$@"
+MINERU_HOME_DIR="${MINERU_HOME:-$HOME/.mineru}"
+AMAZON_ORDERS_OUTPUT_DIR="$MINERU_HOME_DIR/cache/amazon-orders-output"
+source "$MINERU_HOME_DIR/.venv-amazon/bin/activate"
+exec amazon-orders --output-dir "$AMAZON_ORDERS_OUTPUT_DIR" "$@"

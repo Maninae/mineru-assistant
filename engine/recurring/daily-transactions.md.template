@@ -110,7 +110,7 @@ security find-generic-password -a {{KEYCHAIN_ACCOUNT}} -s {{TELEGRAM_BOT_SERVICE
 # missing file is deliberate (then stay silent on absence).
 ```
 
-If everything is fresh (gog < 100d, finance CLI authenticated, Keychain OK, any added checks under threshold): say nothing — green is silent. If anything is stale or failing, add one `🔑 Auth watch:` line to the TOP of the report naming the credential, its age, and the fix (gog: the gog-auth recovery skill; finance CLI: its `auth login` flow).
+If everything is fresh (gog < 100d, finance CLI authenticated, Keychain OK, any added checks under threshold): say nothing — green is silent. If anything is stale or failing, write one `🔑 Auth watch:` line to its own file, `briefs_financial/auth-watch-YYYY-MM-DD.md`, naming the credential, its age, and the fix (gog: the gog-auth recovery skill; finance CLI: its `auth login` flow). Never put it in the main report: that report may also go to a second recipient by iMessage, and auth health is for the operator's Telegram only (step 6).
 
 ---
 
@@ -123,6 +123,13 @@ python3 {{MINERU_HOME}}/scripts/deliver-output.py \
   {{MINERU_HOME}}/briefs_financial/daily-YYYY-MM-DD.md \
   --imessage-keychain <second-recipient-keychain-service> \
   --imessage-format household_finance
+```
+
+If step 5 wrote an auth-watch file, deliver it separately, with no `--imessage-*` flags, so it reaches Telegram only:
+
+```bash
+python3 {{MINERU_HOME}}/scripts/deliver-output.py \
+  {{MINERU_HOME}}/briefs_financial/auth-watch-YYYY-MM-DD.md
 ```
 
 The `--imessage-*` pair is the **optional second-recipient arm**: it sends a reformatted iMessage copy to a household member who doesn't use Telegram. `--imessage-keychain` reads their number from a Keychain service you name (kept out of git); `--imessage-format household_finance` selects the per-merchant emoji map + compact day-grouped layout (see `lib/imessage_format.py`). The arm is non-fatal — a failure there never blocks the Telegram delivery. Drop both flags if the install has no second recipient. See `recurring/README.md` — delivery contract.

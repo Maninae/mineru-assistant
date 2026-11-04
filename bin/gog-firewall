@@ -181,6 +181,8 @@ def main():
             ["gog"] + gog_args,
             capture_output=True,
             text=True,
+            # A non-UTF-8 email body must not kill the whole read; replace bad bytes.
+            errors="replace",
             timeout=120,  # 2 minute timeout for API calls
         )
     except subprocess.TimeoutExpired:

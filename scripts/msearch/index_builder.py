@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -122,6 +123,17 @@ def load_or_build(cache_path: Path, dirs: list[Path], max_age: int = 300, root: 
             pass
 
     index = build_index(dirs, root=root)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(json.dumps(_serialize_index(index), indent=2))
+    save_index_cache(cache_path, index)
     return index
+
+
+def save_index_cache(cache_path: Path, index: Index) -> None:
+    """Write the index cache atomically: temp file in the same dir, then rename over the old one.
+
+    A reader never sees a half-written file, and the old cache is replaced in place
+    (callers never need to delete it first to force a rebuild; use `--no-cache`).
+    """
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_cache_path = cache_path.with_name(f".{cache_path.name}.{os.getpid()}.tmp")
+    temporary_cache_path.write_text(json.dumps(_serialize_index(index), indent=2))
+    os.replace(temporary_cache_path, cache_path)

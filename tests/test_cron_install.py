@@ -71,6 +71,9 @@ from mineru_cli.profile.loader import (
 )
 from mineru_cli.verbs import cron as cron_verb
 
+# `cron run --dry-run` writes a mkdtemp() transcript; keep it out of the real $TMPDIR.
+pytestmark = pytest.mark.usefixtures("system_tempdir_under_tmp_path")
+
 
 runner = CliRunner()
 

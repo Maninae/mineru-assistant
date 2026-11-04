@@ -65,6 +65,9 @@ from mineru_cli.profile.loader import (
 )
 from mineru_cli.verbs import cron as cron_verb
 
+# `cron run --dry-run` writes a mkdtemp() transcript; keep it out of the real $TMPDIR.
+pytestmark = pytest.mark.usefixtures("system_tempdir_under_tmp_path")
+
 
 # The current typer/click here merges stderr into stdout by default; we
 # assert on the merged output instead of relying on a split. Refusal
@@ -365,6 +368,7 @@ def hermetic_run_env(
 
 def test_dry_run_prints_prompt_and_does_not_invoke_stubs(
     hermetic_run_env: Dict[str, Path],
+    system_tempdir_under_tmp_path: Path,
 ) -> None:
     """`mineru cron run memory-description --dry-run`:
 
@@ -414,6 +418,8 @@ def test_dry_run_prints_prompt_and_does_not_invoke_stubs(
     assert transcript_path.exists(), (
         f"expected tempfile transcript at {transcript_path}"
     )
+    # Suite hygiene: the transcript lands under this test's tmp_path, never the real $TMPDIR.
+    transcript_path.relative_to(system_tempdir_under_tmp_path)
     # Not under the workspace.
     try:
         transcript_path.relative_to(env["workspace"])
