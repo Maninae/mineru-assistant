@@ -125,14 +125,14 @@ python3 {{MINERU_HOME}}/scripts/deliver-output.py \
   --imessage-format household_finance
 ```
 
+The `--imessage-*` pair is the **optional second-recipient arm**: it sends a reformatted iMessage copy to a household member who doesn't use Telegram. `--imessage-keychain` reads their number from a Keychain service you name (kept out of git); `--imessage-format household_finance` selects the per-merchant emoji map + compact day-grouped layout (see `lib/imessage_format.py`). The arm is non-fatal — a failure there never blocks the Telegram delivery. Drop both flags if the install has no second recipient. See `recurring/README.md` — delivery contract.
+
 If step 5 wrote an auth-watch file, deliver it separately, with no `--imessage-*` flags, so it reaches Telegram only:
 
 ```bash
 python3 {{MINERU_HOME}}/scripts/deliver-output.py \
   {{MINERU_HOME}}/briefs_financial/auth-watch-YYYY-MM-DD.md
 ```
-
-The `--imessage-*` pair is the **optional second-recipient arm**: it sends a reformatted iMessage copy to a household member who doesn't use Telegram. `--imessage-keychain` reads their number from a Keychain service you name (kept out of git); `--imessage-format household_finance` selects the per-merchant emoji map + compact day-grouped layout (see `lib/imessage_format.py`). The arm is non-fatal — a failure there never blocks the Telegram delivery. Drop both flags if the install has no second recipient. See `recurring/README.md` — delivery contract.
 
 ---
 

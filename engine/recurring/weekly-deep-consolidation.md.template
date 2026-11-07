@@ -14,7 +14,7 @@ MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp); echo "$M
 
 Note the printed path: shell variables do not persist across tool calls, so later steps (including the cleanup) must use this literal path.
 
-Read the entire file at `$MEMORY_DUMP`. It may be large; that's expected. This gives you full context on {{PERSONA_NAME}}'s memories and {{USER_NAME}}'s world.
+Read the entire file at `$MEMORY_DUMP`. It may be large; that's expected. Read it in sequential `offset`/`limit` chunks until end of file; one Read call returns only about 2000 lines, so never stop after the first chunk. This gives you full context on {{PERSONA_NAME}}'s memories and {{USER_NAME}}'s world.
 
 **Do not skip or skim this step.**
 

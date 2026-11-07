@@ -130,7 +130,7 @@ When testing iMessage sends, send to **{{USER_NAME}}'s own number** (recorded in
 ### Safe Commands (USE THESE)
 
 ```bash
-# Google Workspace - Gmail (Calendar reads now go via MCP, see note below)
+# Google Workspace - Gmail
 {{MINERU_HOME}}/bin/gog-firewall gmail search "from:boss"
 
 # iMessage

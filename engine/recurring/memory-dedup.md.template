@@ -20,7 +20,7 @@ MEMORY_DUMP=$(python3 {{MINERU_HOME}}/scripts/concat-memory.py --temp); echo "$M
 
 Note the printed path: shell variables do not persist across tool calls, so later steps (including the cleanup) must use this literal path.
 
-Read the entire dump. This gives you every structured memory file under `{{MEMORY_ROOT}}` concatenated (whatever freeform tree the operator maintains — people, projects, places, etc.).
+Read the entire dump. Read it in sequential `offset`/`limit` chunks until end of file; one Read call returns only about 2000 lines, so never stop after the first chunk. This gives you every structured memory file under `{{MEMORY_ROOT}}` concatenated (whatever freeform tree the operator maintains — people, projects, places, etc.).
 
 ## Step 2: Scan for Issues
 
