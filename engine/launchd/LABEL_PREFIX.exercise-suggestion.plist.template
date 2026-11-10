@@ -7,7 +7,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/bin/python3</string>
+        <string>/usr/bin/python3</string>
         <string>{{MINERU_HOME}}/scripts/daily-exercise-suggestion.py</string>
     </array>
 
