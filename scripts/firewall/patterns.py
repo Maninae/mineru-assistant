@@ -34,6 +34,11 @@ from typing import List, Optional, Tuple
 # TIER A — hard block, near-zero false-positive tolerance
 # ============================================================================
 
+# Literal that scripts/serve-secret.py puts in its message body; the bracket pair
+# never appears in ordinary text. Keep the two definitions in sync.
+SERVED_SECRET_MARKER = "⟦mineru-secret⟧"
+SERVED_SECRET_MARKER_PATTERN = re.escape(SERVED_SECRET_MARKER)
+
 TIER_A_PATTERNS: List[Tuple[str, str]] = [
     # Chat-template special tokens never occur in legitimate human content.
     # NOTHING with any plausible innocent use belongs here — Tier A blocks with
@@ -44,6 +49,10 @@ TIER_A_PATTERNS: List[Tuple[str, str]] = [
     # only in opt-in gated mode.
     (r"<\|im_start\|>|<\|im_end\|>|<\|endoftext\|>", "Chat template token injection"),
     (r"<\|(system|user|assistant)\|>", "Chat template token injection"),
+    # Marker stamped on every self-text sent by scripts/serve-secret.py (an SSN or
+    # document number the operator asked for). Redacting it here keeps the value out
+    # of every later iMessage read, including headless jobs that sweep recent chats.
+    (SERVED_SECRET_MARKER_PATTERN, "Mineru-served secret (never re-read)"),
 ]
 
 # Invisible/zero-width characters used to hide payloads from human review.

@@ -30,8 +30,11 @@ bin/gog-firewall  ─┤→ wrapper_common.py ──────┤→ gog_clean
 ## The pipeline, per unit
 
 1. **Patterns** (`patterns.py`, instant, full text, nothing truncated):
-   - **Tier A** = chat-template tokens (`<|im_start|>`, `<|system|>`, ...).
-     Hit → blocked in every mode. These are the ONLY default blocks.
+   - **Tier A** = chat-template tokens (`<|im_start|>`, `<|system|>`, ...) plus the
+     `SERVED_SECRET_MARKER` (`⟦mineru-secret⟧`) that `scripts/serve-secret.py` stamps on
+     the self-texts carrying an SSN or document number, so no later iMessage read (headless
+     sweeps included) can surface the value. Hit → blocked in every mode. These are the ONLY
+     default blocks.
      "ignore all previous instructions" is deliberately not Tier A (it is
      quoted verbatim in AI/security newsletters).
    - **Tier B** = instruction-to-AI vocabulary, ≥ 2 invisible characters, or
