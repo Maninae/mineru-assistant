@@ -71,6 +71,7 @@ Keep it concise — bullet list, no verbose explanations.
 - **Never delete content.** Only add or edit frontmatter.
 - **Never strip a valid tag or description.** Only add or refine.
 - **Descriptions:** one line, under 100 characters — think file-browser tooltip.
+- **A description never changes a fact.** Copy dates, names and amounts exactly from the body, or leave them out.
 - **Tags:** lowercase; 3–8 per file; reuse the existing vocabulary (Step 1) over inventing synonyms; cover people, places, topics, projects.
 - **Don't over-describe.** "{{USER_NAME}}'s food preferences and dietary notes" not "A comprehensive document detailing {{USER_NAME}}'s various food preferences including but not limited to..."
 - **Use plain language.** No AI-speak (comprehensive, delve, landscape, etc.).

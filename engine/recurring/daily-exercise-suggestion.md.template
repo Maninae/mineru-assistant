@@ -21,7 +21,7 @@ Each row = a black label bar (group — name — dose) above 3 frames spanning t
 - `scripts/telegram_send_photo.py` — Bot API `sendPhoto`.
 - `scripts/download-video.sh` — fetches a source reel with yt-dlp (keeps yt-dlp fresh, walks the login-wall fallbacks).
 
-Pillow + numpy (and system ffmpeg for frame selection) must be importable by the plist's interpreter; without them the job still delivers text.
+Pillow must be importable by the plist's interpreter (`/usr/bin/python3` has it); without it the job still delivers text. `select_frames` also needs numpy and system ffmpeg, and `/usr/bin/python3` has no numpy, so run frame selection under a Python that has both.
 
 ## Rotation logic
 
@@ -36,7 +36,7 @@ When {{USER_NAME}} shares a new exercise video, extract the movements and add ea
 
 ## Manual run / testing
 
-- `python3 {{MINERU_HOME}}/scripts/daily-exercise-suggestion.py` — today: collage + deliver (skips if today's `.md` exists; `--force` to resend).
+- `/usr/bin/python3 {{MINERU_HOME}}/scripts/daily-exercise-suggestion.py` — today: collage + deliver (skips if today's `.md` exists; `--force` to resend).
 - `... --dry-run` — print the text message only, no file, no delivery.
 - `... --date 2026-09-01 --dry-run` — a specific date (verify rotation).
 - `... --collage-sample /tmp/out.png [--date YYYY-MM-DD]` — render the collage PNG only, no delivery.

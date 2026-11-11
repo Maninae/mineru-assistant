@@ -54,7 +54,7 @@ When you find yourself adding "always do X" to a prompt, ask: can this be a scri
 
 This applies to: consolidation jobs, denoising, any headless Claude work. CC is the standard path.
 
-**Default model:** Per `{{USER_CLAUDE_HOME}}/settings.json`, the main session and subagents run configured defaults. The Telegram daemon runs its own configured model per `{{MINERU_HOME}}/landline.json`. Concrete model choices live in `prompts/TECHNICAL.local.md`. {{USER_NAME}} is OK with using a more powerful model even for mundane tasks - no need to add extra model flags unless {{USER_PRONOUN_SUBJECT}} specifically and explicitly ask{{USER_VERB_S}} for a cheaper/faster model.
+**Default model:** Per `{{USER_CLAUDE_HOME}}/settings.json`, the main session and subagents run configured defaults. The Telegram daemon runs its own configured model per `{{MINERU_HOME}}/landline.json`. Concrete model choices live in `prompts/TECHNICAL.local.md`. {{USER_NAME}} is OK with using a more powerful model even for mundane tasks - no need to add extra model flags unless {{USER_PRONOUN_SUBJECT}} specifically and explicitly ask{{USER_VERB_S}} for a cheaper/faster model. Subagent tier rules, where set in MEMORY.md, still apply.
 
 ### When to Use Sub-Agents in Main Session
 
@@ -74,7 +74,7 @@ Anthropic model families you may encounter in this workspace. Which specific IDs
 
 | Family | Notes |
 |-------|-------|
-| Fable 5.x (`claude-fable-5-1`, `claude-fable-5`) | Mythos-class tier - most capable generally-available family, sits above Opus. |
+| Fable 5.x (`claude-fable-5-2`, `claude-fable-5-1`, `claude-fable-5`) | Mythos-class tier - most capable generally-available family, sits above Opus. |
 | Opus 5.x (`claude-opus-5-5`, `claude-opus-5`) | Current Opus line; 1M-context variants available. |
 | Opus 4.x (`claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`) | Prior Opus flagship line; 1M-context variants available. |
 | Sonnet 5.5 / 5 / 4.x (`claude-sonnet-5-5`, `claude-sonnet-5`, `claude-sonnet-4-6`) | Opus-level performance at Sonnet cost; Sonnet 5 is cheaper than 4.6. |
@@ -88,7 +88,7 @@ Anthropic model families you may encounter in this workspace. Which specific IDs
 
 Two failure modes cause all cron jobs to stop delivering at once:
 
-**Auth expiry (401).** Claude Code's auth token expires, making every headless `claude-fda -p` job fail with `401 Invalid authentication credentials` (or `Failed to authenticate: OAuth session expired and could not be refreshed`). The key-icon alert fires; confirm with `claude-fda -p 'say hi'`; recovery is restarting the Mac (or re-logging-in CC).
+**Auth expiry (401).** Claude Code's auth token expires, making every headless `claude-fda -p` job fail with `401 Invalid authentication credentials` (or `Failed to authenticate: OAuth session expired and could not be refreshed`). The key-icon alert fires; confirm with `claude-fda -p 'say hi'`; recovery is restarting the Mac (or re-logging-in CC). A `Warning: this sign-in ends between ...` line in `logs/<job>/*.err` is a hard expiry that a restart will not fix: run `claude auth login` before the first date, or `claude setup-token` for unattended jobs.
 
 **Max budget cap ("session limit").** The Max subscription's session budget resets on a rolling schedule (the reset time varies and is printed in the error). Jobs that fire near the reset boundary can hit the cap and fail with `"You've hit your session limit"`. Symptom looks identical to auth expiry (burst of alerts, deliveries stop), but the fix is different: wait for the quota reset (no restart needed). To distinguish: check the job log for "session limit" / "resets" vs "401". Safe to re-run jobs after reset; `consolidate-daily-memories` has a date arg + idempotency guard (skips if the consolidated file already exists).
 
