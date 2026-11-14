@@ -12,7 +12,7 @@ The system rotates through 3 topic clusters:
 | 2 | Tech & AI | Major labs + broader landscape (agentic, new labs/models), regulation, CV/perception research |
 | 3 | Energy & Climate | Solar, batteries, EVs, nuclear, wind, grid/storage, EPA, climate |
 
-Rotation is continuous — no regard for day of week. State tracked in `briefs_news/rotation-state.json`; its `last_cluster` is 0-indexed (0 = Day 1, 1 = Day 2, 2 = Day 3).
+Rotation is continuous — no regard for day of week. State tracked in `briefs_news/rotation-state.json`; its `last_cluster` is 0-indexed (0 = Day 1, 1 = Day 2, 2 = Day 3). The fetch script's echo lines count from 1 (Day N) while `last_cluster` counts from 0; they agree when echo = last_cluster + 1.
 
 ---
 
@@ -68,13 +68,13 @@ Pick **TOP 3 stories** that best represent today's cluster focus.
 - **Priority Threads accounts** (configure per install; the two below are an example of AI-news accounts worth following) — Fetch each profile's latest posts BEFORE writing the brief, then prioritize that content in the story mix. Use `bin/browser` (see the `mineru_browser` skill for the full pattern):
   ```bash
   # For each profile: open -> snapshot -> extract the recent posts from the snapshot tree
-  {{MINERU_HOME}}/bin/browser action=open targetUrl="https://www.threads.net/@sung.kim.mw"
+  {{MINERU_HOME}}/bin/browser action=open targetUrl="https://www.threads.com/@sung.kim.mw"
   {{MINERU_HOME}}/bin/browser action=snapshot targetId=<returned tab id>
   # Repeat for each account, then close the tabs.
   ```
   Accounts:
-  - @sung.kim.mw (https://www.threads.net/@sung.kim.mw) — Sung Kim
-  - @omarsar0 (https://www.threads.net/@omarsar0) — Elvis Saravia (DAIR.AI)
+  - @sung.kim.mw (https://www.threads.com/@sung.kim.mw) — Sung Kim
+  - @omarsar0 (https://www.threads.com/@omarsar0) — Elvis Saravia (DAIR.AI)
 
   Open and snapshot every account even if an earlier one was login-walled, and report each account's result separately. If a snapshot returns an empty or login-walled feed, note it and move on — do not block the brief.
 - **ALSO READ: `briefs_news/raw/YYYY-MM-DD-research.json`** (fetched only on Day 2 by `fetch-research.sh` — the file does NOT exist on Days 1 or 3; don't hunt for it) — contains:

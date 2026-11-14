@@ -11,7 +11,7 @@ Set the date first: `TODAY=$(date +%Y-%m-%d)`.
 
 ## Step 0 — Inventory our assignments (deterministic, use grep)
 - Recurring jobs: `grep -HoE 'claude-(opus|sonnet|haiku|fable)-[0-9]+(-[0-9]+)?(\[1m\])?' {{MINERU_HOME}}/scripts/trigger-*.sh`
-- Telegram daemon: `claude_model` in `{{MINERU_HOME}}/landline.json` (an alias like `fable[1m]` means "latest of that tier").
+- Telegram daemon: `claude_model` in `{{MINERU_HOME}}/landline.json` (an alias like `fable[1m]` does NOT prove it is current: confirm the model the daemon actually ran from its newest session, e.g. `grep -ho '"model":"claude-[a-z]*-[0-9-]*' $(ls -t {{USER_CLAUDE_HOME}}/projects/*/*.jsonl | head -20) | sort | uniq -c`).
 - FYI only (outside cron scope, informational): `"model"` and `CLAUDE_CODE_SUBAGENT_MODEL` in `{{USER_CLAUDE_HOME}}/settings.json`.
 
 ## Step 1 — Fetch the current lineup from primary sources

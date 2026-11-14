@@ -205,7 +205,7 @@ for f in memory/daily/*_*.md; do
   [[ "$d" < "$TODAY" ]] && [ -f "memory/daily/$d.md" ] && ! is_kept "$f" && trash "$f"
 done
 ```
-Days with NO consolidated file are the only surviving record of those sessions — leave those files alone and flag them in the report instead.
+Days with NO consolidated file are the only surviving record of those sessions — leave those files alone and flag them in the report instead. Files kept by the `keep: true` marker are intentional: never list them. Before flagging any file, check `is_kept` and `[ -f memory/daily/$d.md ]` yourself.
 
 **Only clean up after confirming the consolidated file was written successfully.**
 
