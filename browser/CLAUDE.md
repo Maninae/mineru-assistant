@@ -6,7 +6,7 @@ A persistent HTTP server (port 9471) that keeps a stealth-patched Chromium alive
 
 **The server runs on homebrew Python 3.14** (`/opt/homebrew/bin/python3`), because that's the ONLY interpreter on this machine where `cloakbrowser` and `playwright_stealth` are installed. System `/usr/bin/python3` (3.9) does **not** have them — spawning the server there yields a process that 500s on every browser launch with `No module named 'playwright_stealth'`.
 
-`bin/browser` enforces this: `_server_python()` validates that the chosen interpreter can import the stealth deps before spawning the server (preferring `$MINERU_BROWSER_PYTHON`, then `/opt/homebrew/bin/python3`, then the current interpreter, then PATH), and warns loudly if none qualify. **Do not** revert it to `sys.executable` — the CLI's `#!/usr/bin/env python3` shebang is PATH-dependent and a launchd/sandbox/stripped-PATH caller will land on system 3.9.
+`bin/browser` enforces this: `_server_python()` validates that the chosen interpreter can import the stealth deps before spawning the server (preferring `$MINERU_BROWSER_PYTHON`, then `/opt/homebrew/bin/python3.14`, then `/opt/homebrew/bin/python3`, then the current interpreter, then PATH), and warns loudly if none qualify. **Do not** revert it to `sys.executable` — the CLI's `#!/usr/bin/env python3` shebang is PATH-dependent and a launchd/sandbox/stripped-PATH caller will land on system 3.9.
 
 **Keep the code 3.9-compatible anyway** (defensive — shares idioms with the daemon, and protects the validated-fallback path). **Python 3.10+ syntax crashes on 3.9.**
 

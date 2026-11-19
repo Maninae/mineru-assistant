@@ -216,11 +216,17 @@ def _can_import_server_deps(python_exe):
 def _server_python():
     # type: () -> str
     """Pick a Python that can run the server. First candidate whose imports
-    validate wins: explicit override, homebrew, current interpreter, PATH."""
+    validate wins: explicit override, pinned homebrew 3.14, floating homebrew
+    python3, current interpreter, PATH.
+
+    - The pinned 3.14 comes before the floating `python3` link because a
+      Homebrew upgrade repoints `python3` at a fresh minor with no site-packages.
+    """
     candidates = []
     override = os.environ.get("MINERU_BROWSER_PYTHON")
     if override:
         candidates.append(override)
+    candidates.append("/opt/homebrew/bin/python3.14")
     candidates.append("/opt/homebrew/bin/python3")
     candidates.append(sys.executable)
     path_python = shutil.which("python3")
