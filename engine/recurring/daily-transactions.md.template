@@ -102,6 +102,11 @@ gog auth list --json | jq -r '.accounts[0].created_at'   # compare to today
 # Finance CLI session (feeds this very report) — use its auth-status verb.
 {{MINERU_HOME}}/bin/{{FINANCE_CLI_BINARY_NAME}} auth status --verify
 
+# Claude Code sign-in: a hard expiry that renewal does not move; every headless
+# job fails after it. Alert when under 14 days out, so this weekly run always
+# lands at least 7 days before the cliff. Print only the date (the JSON has the email).
+claude auth status --json | jq -r '.loginExpiresAt'   # ISO 8601 UTC; compare to now
+
 # Telegram bot token readable (Keychain unlocked)?
 security find-generic-password -a {{KEYCHAIN_ACCOUNT}} -s {{TELEGRAM_BOT_SERVICE}} -w >/dev/null 2>&1 && echo OK || echo LOCKED/MISSING
 
@@ -110,7 +115,7 @@ security find-generic-password -a {{KEYCHAIN_ACCOUNT}} -s {{TELEGRAM_BOT_SERVICE
 # missing file is deliberate (then stay silent on absence).
 ```
 
-If everything is fresh (gog < 100d, finance CLI authenticated, Keychain OK, any added checks under threshold): say nothing — green is silent. If anything is stale or failing, write one `🔑 Auth watch:` line to its own file, `briefs_financial/auth-watch-YYYY-MM-DD.md`, naming the credential, its age, and the fix (gog: the gog-auth recovery skill; finance CLI: its `auth login` flow). Never put it in the main report: that report may also go to a second recipient by iMessage, and auth health is for the operator's Telegram only (step 6).
+If everything is fresh (gog < 100d, finance CLI authenticated, Keychain OK, Claude Code sign-in 14+ days out, any added checks under threshold): say nothing — green is silent. If anything is stale or failing, write one `🔑 Auth watch:` line to its own file, `briefs_financial/auth-watch-YYYY-MM-DD.md`, naming the credential, its age, and the fix (gog: the gog-auth recovery skill; finance CLI: its `auth login` flow; Claude Code: run `claude auth login` on the host before the expiry date, since every cron job stops then). Never put it in the main report: that report may also go to a second recipient by iMessage, and auth health is for the operator's Telegram only (step 6).
 
 ---
 

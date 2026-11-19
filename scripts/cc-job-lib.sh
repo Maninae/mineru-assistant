@@ -148,6 +148,7 @@ _rotate_logs() {
 _cc_auth_expired_in_log() {
   [ -n "${CC_JOB_LOG_FILE:-}" ] && [ -r "$CC_JOB_LOG_FILE" ] || return 1
   grep -q -e "Invalid authentication credentials" -e "API Error: 401" \
+    -e "OAuth session expired" \
     "$CC_JOB_LOG_FILE" 2>/dev/null
 }
 
@@ -166,7 +167,7 @@ _send_failure_alert() {
   local reason="$3"
   local msg
   if _cc_auth_expired_in_log; then
-    msg="🔑 Cron job ${job} failed: Claude Code auth expired (401). ALL cron jobs will fail until CC re-auths. Fix: restart the Mac (see TECHNICAL.md, When Jobs Go Silent)."
+    msg="🔑 Cron job ${job} failed: Claude Code auth expired (401). ALL cron jobs will fail until CC re-auths. Fix: run \`claude auth login\` at the Mac (a restart only helps a refresh glitch; see TECHNICAL.md, When Jobs Go Silent)."
   else
     msg="⚠️ Cron job ${job} failed (${reason}, exit ${code}). Check logs/${job}/."
   fi
