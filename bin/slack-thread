@@ -22,8 +22,9 @@ if [[ ! -f "$CACHE" ]]; then
   exit 1
 fi
 
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "https://slack.com/api/conversations.replies?channel=$CHANNEL&ts=$TS&limit=$LIMIT" | \
+# Token is fed to curl as a config on stdin (-K -) so it never appears in argv / ps.
+curl -s -K - \
+  "https://slack.com/api/conversations.replies?channel=$CHANNEL&ts=$TS&limit=$LIMIT" <<<"header = \"Authorization: Bearer $TOKEN\"" | \
   jq --slurpfile users "$CACHE" '
     if .ok == false then
       {ok: false, error: .error}

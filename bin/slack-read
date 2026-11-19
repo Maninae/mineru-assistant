@@ -15,8 +15,9 @@ if [[ ! -f "$CACHE" ]]; then
   exit 1
 fi
 
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "https://slack.com/api/conversations.history?channel=$CHANNEL&limit=$LIMIT" | \
+# Token is fed to curl as a config on stdin (-K -) so it never appears in argv / ps.
+curl -s -K - \
+  "https://slack.com/api/conversations.history?channel=$CHANNEL&limit=$LIMIT" <<<"header = \"Authorization: Bearer $TOKEN\"" | \
   jq --slurpfile users "$CACHE" '
     .messages | reverse | .[] | 
     {

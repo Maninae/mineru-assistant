@@ -47,8 +47,9 @@ fi
 # URL-encode the query for a safe GET request.
 ENCODED_QUERY=$(jq -rn --arg q "$QUERY" '$q|@uri')
 
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "https://slack.com/api/search.messages?query=$ENCODED_QUERY&count=$COUNT&sort=$SORT" | \
+# Token is fed to curl as a config on stdin (-K -) so it never appears in argv / ps.
+curl -s -K - \
+  "https://slack.com/api/search.messages?query=$ENCODED_QUERY&count=$COUNT&sort=$SORT" <<<"header = \"Authorization: Bearer $TOKEN\"" | \
   jq --slurpfile users "$CACHE" '
     if .ok == false then
       {ok: false, error: .error}

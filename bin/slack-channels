@@ -33,8 +33,9 @@ done
 
 TOKEN=$(security find-generic-password -a "${SLACK_KEYCHAIN_ACCOUNT:-mineru}" -s "${SLACK_KEYCHAIN_SERVICE:-slack-bot-token}" -w 2>/dev/null) || { echo "Error: Slack token not in Keychain" >&2; exit 1; }
 
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "https://slack.com/api/conversations.list?types=$TYPES&exclude_archived=true&limit=$LIMIT" | \
+# Token is fed to curl as a config on stdin (-K -) so it never appears in argv / ps.
+curl -s -K - \
+  "https://slack.com/api/conversations.list?types=$TYPES&exclude_archived=true&limit=$LIMIT" <<<"header = \"Authorization: Bearer $TOKEN\"" | \
   jq '
     if .ok == false then
       {ok: false, error: .error}

@@ -6,7 +6,8 @@ TOKEN=$(security find-generic-password -a "${SLACK_KEYCHAIN_ACCOUNT:-mineru}" -s
 CACHE="${MINERU_HOME:-$HOME/.mineru}/cache/slack-users.json"
 
 echo "Fetching Slack users..."
-curl -s -H "Authorization: Bearer $TOKEN" "https://slack.com/api/users.list?limit=1000" | \
+# Token is fed to curl as a config on stdin (-K -) so it never appears in argv / ps.
+curl -s -K - "https://slack.com/api/users.list?limit=1000" <<<"header = \"Authorization: Bearer $TOKEN\"" | \
   jq '[.members[] | {id, name, real_name, display_name: .profile.display_name}] | map({key: .id, value: {name: .name, real_name: .real_name, display: .display_name}}) | from_entries' > "$CACHE"
 
 COUNT=$(jq 'keys | length' "$CACHE")
