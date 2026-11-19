@@ -2,7 +2,7 @@
 
 Python 3.9 compatible (see config.py).
 
-Run order matters: the cheap kernel-level reads (ps, launchctl, sysctl) go first
+Run order matters (the missed-run check, file stats plus one launchctl call, runs last): the cheap kernel-level reads (ps, launchctl, sysctl) go first
 so they are in hand even if the TCC probe hangs; the OrbStack probe (up to two 30 s
 deadlines, more during a restart) runs after the browser checks. The hung-job
 killer, the browser stop, orphan termination and the OrbStack restart are the only
@@ -24,9 +24,11 @@ from health_watchdog import (
     browser_hygiene,
     evaluate,
     evaluate_browser_open,
+    evaluate_missed_runs,
     evaluate_orbstack,
     hung_jobs,
     landline_health,
+    missed_runs,
     orbstack_health,
 )
 from health_watchdog.config import (
@@ -146,7 +148,16 @@ def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
         findings.append(evaluate.orphaned_browser_finding(len(orphans), killed, survivors, DRY_RUN))
 
     findings.extend(handle_orbstack(state, now.timestamp()))
+    findings.extend(handle_missed_runs(now))
     return findings
+
+
+def handle_missed_runs(now: dt.datetime) -> List[Finding]:
+    """Scheduled jobs that went quiet for longer than their cadence allows."""
+    jobs = missed_runs.collect_job_activity(now)
+    stale = evaluate_missed_runs.evaluate_missed_runs(jobs, now.timestamp())
+    logger.info("missed runs: %d scheduled job(s) checked, %d past their allowed silence", len(jobs), len(stale))
+    return stale
 
 
 def handle_page_open_probe(browser, table, state: dict, now_ts: float) -> List[Finding]:

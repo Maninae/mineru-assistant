@@ -35,7 +35,21 @@ RECOVERED_TITLES = {
     "orbstack_stuck_exit": "OrbStack helper stuck in exit (gone now)",
     "browser_open": "stealth browser opens pages again",
 }
+# Per-job checks ("missed_run:<label>") recover with the label named.
+RECOVERED_PREFIX_TITLES = {
+    "missed_run:": "%s ran again",
+}
 CRASH_NOTE_MAX_CHARS = 300
+
+
+def recovered_title(check_id: str) -> str:
+    """Human name of a recovered check; prefixed per-job ids name the job."""
+    if check_id in RECOVERED_TITLES:
+        return RECOVERED_TITLES[check_id]
+    for prefix, template in RECOVERED_PREFIX_TITLES.items():
+        if check_id.startswith(prefix):
+            return template % check_id[len(prefix):]
+    return check_id
 
 
 def short_hostname() -> str:
@@ -51,7 +65,7 @@ def format_alert_message(to_send: List[Finding], recovered: List[str], now: dt.d
         for detail in finding.details:
             lines.append(DETAIL_PREFIX + detail)
     for check_id in recovered:
-        lines.append("%s recovered: %s" % (RECOVERED_ICON, RECOVERED_TITLES.get(check_id, check_id)))
+        lines.append("%s recovered: %s" % (RECOVERED_ICON, recovered_title(check_id)))
     return "\n".join(lines)
 
 

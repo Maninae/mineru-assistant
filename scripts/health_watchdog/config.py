@@ -154,6 +154,20 @@ LANDLINE_SILENT_WINDOW_SECONDS = 6 * 3600
 LANDLINE_SILENT_WARN_COUNT = 2
 LANDLINE_LOG_TAIL_BYTES = 2_000_000
 
+# Missed runs: a scheduled job whose newest sign of life is older than its longest
+# scheduled gap plus grace raised a CRITICAL (so a "ran again" recovery line follows).
+# Grace = max(gap x FACTOR, gap + MIN); the 12 h cooldown keeps a dead daily job to
+# two pings a day.
+MISSED_RUN_GRACE_FACTOR = 1.5
+MISSED_RUN_MIN_GRACE_SECONDS = 4 * 3600
+MISSED_RUN_COOLDOWN_SECONDS = 12 * 3600
+# The Pulse job registry (label suffix -> display name + freshness signal), shared with app/.
+LAUNCHD_JOBS_REGISTRY_FILE = Path(
+    os.environ.get("MINERU_LAUNCHD_JOBS_FILE", str(MINERU_HOME / "config" / "launchd-jobs.json"))
+)
+PAUSED_JOBS_DIR = MINERU_HOME / "cache" / "paused-jobs"
+JOB_LOGS_DIR = MINERU_HOME / "logs"
+
 # Disk on /.
 DISK_FREE_WARN_GB = 10.0
 DISK_FREE_CRITICAL_GB = 5.0
@@ -246,3 +260,25 @@ JOB_COMMAND_MARKERS = JOB_COMMAND_MARKERS + tuple(
 # Off by default: the generic engine never restarts someone's VM unasked. Only a JSON
 # `true` enables it (a string "false" must not).
 ORBSTACK_AUTO_RESTART = _private.get("orbstack_auto_restart", False) is True
+# Missed-run check scope. The workspace prefix is always watched; other launchd
+# prefixes the operator owns (personal scripts) are added here. Labels are skipped by
+# full label; freshness maps a full label to a registry-shaped spec ({"kind": ...},
+# paths absolute, "~/"-relative, or relative to MINERU_HOME), which wins over the
+# registry. Extra plist dirs are scanned after LaunchAgents (a label found twice keeps
+# the LaunchAgents copy); a plist only counts when its label is loaded in launchd.
+MISSED_RUN_LABEL_PREFIXES = (LAUNCHD_PREFIX,) + tuple(
+    str(prefix) for prefix in list(_private.get("missed_run_extra_label_prefixes", []) or [])
+)
+MISSED_RUN_SKIP_LABELS = frozenset(
+    ["%s.%s" % (LAUNCHD_PREFIX, WATCHDOG_JOB_NAME)]
+    + [str(label) for label in list(_private.get("missed_run_skip_labels", []) or [])]
+)
+MISSED_RUN_FRESHNESS_OVERRIDES = {
+    str(label): dict(spec)
+    for label, spec in dict(_private.get("missed_run_freshness", {}) or {}).items()
+    if isinstance(spec, dict)
+}  # type: Dict[str, Dict[str, Any]]
+MISSED_RUN_EXTRA_PLIST_DIRS = tuple(
+    Path(os.path.expanduser(str(directory)))
+    for directory in list(_private.get("missed_run_extra_plist_dirs", []) or [])
+)

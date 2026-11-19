@@ -6,5 +6,11 @@
   },
   "extra_service_command_fragments": [],
   "extra_job_command_markers": ["/scripts/my-private-job-helper.py"],
-  "orbstack_auto_restart": false
+  "orbstack_auto_restart": false,
+  "missed_run_extra_label_prefixes": ["com.example-personal"],
+  "missed_run_extra_plist_dirs": [],
+  "missed_run_skip_labels": [],
+  "missed_run_freshness": {
+    "com.example-personal.nightly-backup": {"kind": "file_mtime", "path": "~/Library/Logs/nightly-backup.log"}
+  }
 }

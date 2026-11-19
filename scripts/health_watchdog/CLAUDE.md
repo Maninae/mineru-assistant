@@ -1,6 +1,6 @@
 # scripts/health_watchdog/ — System Health Watchdog
 
-A launchd job (`<prefix>.health-watchdog`, every 300 s) that notices a wedged Mac and says so loudly: a stuck `tccd` freezing protected-file reads, memory/swap pressure, sustained load, hung scheduled jobs (which it kills), a runaway stealth-browser renderer (which it stops), stealth-browser tab piles and week-idle tabs (which it only lists), a wedged OrbStack VM (which it can restart), repeated Landline silent-kills, and low disk. One Telegram message per run, per-check cooldowns, a "recovered" line when a check clears, everything also logged locally.
+A launchd job (`<prefix>.health-watchdog`, every 300 s) that notices a wedged Mac and says so loudly: a stuck `tccd` freezing protected-file reads, memory/swap pressure, sustained load, hung scheduled jobs (which it kills), a runaway stealth-browser renderer (which it stops), stealth-browser tab piles and week-idle tabs (which it only lists), a wedged OrbStack VM (which it can restart), repeated Landline silent-kills, low disk, and scheduled jobs that silently stopped firing (missed runs). One Telegram message per run, per-check cooldowns, a "recovered" line when a check clears, everything also logged locally.
 
 **Python 3.9 only.** launchd runs it under `/usr/bin/python3`. No `X | None`, no `match`, `typing.Optional/List/Dict` in annotations. Stdlib only. After any edit: `/usr/bin/python3 -c "import py_compile,glob; [py_compile.compile(f,doraise=True) for f in glob.glob('scripts/health_watchdog/*.py')]"`.
 
@@ -31,6 +31,9 @@ __main__.py            orchestrator: logging, pause guard, run order, deliver, p
    ├── evaluate.py          thresholds -> Finding (pure; streaks via state.bump_streak)
    ├── evaluate_orbstack.py OrbStack wedge / stuck-exit / restart decision (pure, same rules)
    ├── evaluate_browser_open.py  page-open probe schedule + verdict (pure, same rules)
+   ├── job_schedule.py      plist StartInterval / StartCalendarInterval -> longest gap between fires (pure)
+   ├── missed_runs.py       loaded scheduled plists -> newest sign of life per job (file stats + one launchctl list)
+   ├── evaluate_missed_runs.py  silent-too-long -> per-job CRITICAL (pure)
    ├── state.py             JSON state, cooldown + recovery decisions (pure)
    ├── alerting.py          message format, deliver-output.py --raw, bounded osascript fallback
    ├── findings.py          Finding / Severity
@@ -52,6 +55,7 @@ Dependencies flow downward only: `__main__` -> probes/actions -> `process_table`
 - **`docker` is never called unless `orb status` says Running.** Any `docker` call auto-launches a stopped OrbStack, so the probe order is `orb status` (bounded; a hang counts as hung) and only then `docker version`. Stopped is a deliberate state (or the app is not set to start at login): no finding, no auto-start. Test: `test_docker_is_never_invoked_when_orb_status_is_stopped`.
 - **OrbStack restarts are opt-in, rationed, and need a hung probe.** Only with `orbstack_auto_restart: true` in the per-install config, only when `orb status`/`docker version` hung for `ORBSTACK_HUNG_SUSTAINED_RUNS` runs (helper CPU alone stays a WARN: a busy container can hold it above 200% while docker answers), at most once per `ORBSTACK_RESTART_COOLDOWN_S` (persisted before the attempt), and never while a helper is stuck in exit state. After `orb start` the probe is retried (up to 4 times, 15 s apart, 120 s budget) before declaring the VM did not come back.
 - **A finding may carry its own cooldown** (`Finding.cooldown_seconds`); the daily tab notices use 24 h and the stuck-exit CRITICAL 6 h (it repeats until a reboot) instead of the severity defaults.
+- **Missed runs judge only loaded, scheduled jobs.** In scope: plists under a watched prefix (workspace prefix plus `missed_run_extra_label_prefixes`) in LaunchAgents (then `missed_run_extra_plist_dirs`) whose label is in `launchctl list` and that have a schedule. Retiring a job (bootout + remove the plist) silences it with no config change. Skipped: KeepAlive, the watchdog itself, `missed_run_skip_labels`, `neutral` freshness, and jobs paused via `bin/pause-job`. Newest sign of life = max(registry/override freshness signal, newest file under `logs/<suffix>/`, plist stdout/stderr mtime), floored by the plist's mtime (fresh install) and the day after an expired pause. Allowed silence = max(1.5 x longest gap, gap + 4 h). Each job is its own check `missed_run:<label>`: CRITICAL (so a "ran again" line follows), 12 h cooldown. A failed `launchctl list` skips the check rather than flagging everything.
 - **A crash of the watchdog itself** logs the traceback and sends one short Telegram note (bounded, best effort), exit code 1.
 - **No per-install literals** (names, home paths): the engine's leak-gate tests scan this directory. Derive paths from `MINERU_HOME` / `HOME`.
 - **Pause file** `cache/paused-jobs/health-watchdog.until` uses the same date semantics as `cc-job-lib.sh`, so `bin/pause-job` works unchanged.
@@ -63,14 +67,14 @@ Dependencies flow downward only: `__main__` -> probes/actions -> `process_table`
 | Rotating log | `$MINERU_HOME/logs/health-watchdog/watchdog.log` (+ launchd `stdout.log` / `stderr.log`) |
 | State (streaks, cooldowns, active checks, stuck probe pid, `orbstack_last_restart_ts`) | `$MINERU_HOME/cache/health-watchdog-state.json` |
 | Plist template | `engine/launchd/LABEL_PREFIX.health-watchdog.plist.template` |
-| Per-install overrides (optional) | `$MINERU_HOME/config/health-watchdog.json`: `offload_volume`, `job_max_age_overrides_seconds`, `extra_service_command_fragments`, `extra_job_command_markers` (private scripts jobs spawn indirectly), `orbstack_auto_restart` (default false); starter at `engine/config/health-watchdog.example.json` |
+| Per-install overrides (optional) | `$MINERU_HOME/config/health-watchdog.json`: `offload_volume`, `job_max_age_overrides_seconds`, `extra_service_command_fragments`, `extra_job_command_markers` (private scripts jobs spawn indirectly), `orbstack_auto_restart` (default false), `missed_run_extra_label_prefixes`, `missed_run_extra_plist_dirs`, `missed_run_skip_labels`, `missed_run_freshness` (full label -> registry-shaped spec; absolute, `~/`, or workspace-relative paths; wins over `config/launchd-jobs.json`); starter at `engine/config/health-watchdog.example.json` |
 
 ## Adding a check
 
 1. Probe in the module that owns the data source (or a new `<thing>_probe.py` if it is a new source); return plain data, run commands only through `run_with_deadline`.
 2. Threshold -> `Finding` in `evaluate.py`; constants in `config.py`; sustained checks use `bump_streak`.
 3. Wire it in `__main__.collect_findings`, add a `RECOVERED_TITLES` entry in `alerting.py`.
-4. Tests: `tests/test_health_watchdog_probes.py` (parser), `tests/test_health_watchdog_orbstack.py` (OrbStack probe order + logic), `tests/test_health_watchdog_alerting_logic.py` (threshold + cooldown), `tests/test_health_watchdog_hung_jobs.py` (selector). Run with `uv run --with pytest pytest tests/test_health_watchdog_*.py`.
+4. Tests: `tests/test_health_watchdog_probes.py` (parser), `tests/test_health_watchdog_orbstack.py` (OrbStack probe order + logic), `tests/test_health_watchdog_alerting_logic.py` (threshold + cooldown), `tests/test_health_watchdog_hung_jobs.py` (selector), `tests/test_health_watchdog_missed_runs.py` (cadence, scope, signals, cooldown). Run with `uv run --with pytest pytest tests/test_health_watchdog_*.py`.
 
 ## Stealth-browser tabs: surfaced, not reaped
 
