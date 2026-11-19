@@ -28,7 +28,8 @@ Unlike Gmail (where MCP can't write, so writes stay on the CLI), **MCP Calendar 
 |----------|-------------|-----|
 | **Personal** | {{USER_NAME}}'s personal events (default for personal scheduling) | `{{PERSONAL_CALENDAR_ID}}` |{{#if CHURCH_CALENDAR_ID}}
 | Church | Church / community events | `{{CHURCH_CALENDAR_ID}}` |{{/if}}
-| Family | Family-shared events | `{{FAMILY_CALENDAR_ID}}` |
+| Family | Family-shared events | `{{FAMILY_CALENDAR_ID}}` |{{#each EXTRA_CALENDARS}}
+| {{label}} | {{purpose}} | `{{id}}` |{{/each}}
 
 ---
 
