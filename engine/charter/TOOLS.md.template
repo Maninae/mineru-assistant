@@ -80,7 +80,7 @@ Current grant status on this install: `TOOLS.local.md`.
 
 **Quick pattern:** `open` -> `snapshot` (get refs) -> `act` (click/type/scroll) -> `screenshot` (verify)
 
-**Opaque 500s:** drop down to direct `curl` to read the response body. Direct POSTs need `-H "Authorization: Bearer $(cat {{MINERU_HOME}}/cache/browser-server.token)"`.
+**Opaque 500s:** drop down to direct `curl` to read the response body. Direct POSTs need the token as a header, fed via a curl config so it stays out of argv (`ps`): `-K <(printf 'header = "Authorization: Bearer %s"\n' "$(cat {{MINERU_HOME}}/cache/browser-server.token)")`.
 
 ## Google Workspace (gog-firewall)
 
