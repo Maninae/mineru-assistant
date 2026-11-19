@@ -1,4 +1,5 @@
-"""Browser hygiene: tab piles, idle tabs, runaway renderers, orphaned stealth Chromium.
+"""Browser hygiene: tab piles, idle tabs, runaway renderers, orphaned stealth Chromium,
+and a real page-open probe.
 
 Python 3.9 compatible (see config.py).
 
@@ -6,7 +7,8 @@ The browser server (browser/server.py, port 9471) exposes unauthenticated GET
 /health and /tabs; the documented safe stop is `bin/browser action=stop` (profile
 and logins persist, the server auto-starts on next use). When the server is down
 the tab snapshot at cache/browser-tabs.json is stale, so it is only consulted
-while /health answers.
+while /health answers. /health says nothing about whether Chromium can launch
+(it stays 200 on a Python without playwright), hence probe_page_open.
 """
 
 import datetime as dt
@@ -23,13 +25,16 @@ from health_watchdog.config import (
     BROWSER_CLI,
     BROWSER_SERVER_COMMAND_MARKER,
     BROWSER_HTTP_DEADLINE_SECONDS,
+    BROWSER_OPEN_PROBE_DEADLINE_SECONDS,
+    BROWSER_OPEN_PROBE_ERROR_MAX_CHARS,
+    BROWSER_OPEN_PROBE_URL,
     BROWSER_PORT,
     BROWSER_PROFILE_DIR,
     BROWSER_STOP_DEADLINE_SECONDS,
     BROWSER_TAB_SUMMARY_LIMIT,
     BROWSER_TABS_SNAPSHOT,
 )
-from health_watchdog.process_table import ProcessInfo
+from health_watchdog.process_table import ProcessInfo, outcome_summary
 from health_watchdog.subprocess_deadline import CommandOutcome, run_with_deadline
 
 RENDERER_MARKER = "--type=renderer"
@@ -175,3 +180,40 @@ def stop_browser(dry_run: bool) -> Optional[CommandOutcome]:
     if dry_run:
         return None
     return run_with_deadline([sys.executable, str(BROWSER_CLI), "action=stop"], BROWSER_STOP_DEADLINE_SECONDS)
+
+
+@dataclass
+class PageOpenProbe:
+    """Result of asking the live server to open and close one about:blank tab."""
+
+    ok: bool
+    detail: str
+
+
+def probe_page_open() -> PageOpenProbe:
+    """Open BROWSER_OPEN_PROBE_URL through the CLI, then close the tab it made.
+
+    - The caller only runs this with the server up and 0 tabs open, so it never
+      starts a server and never sits next to a session's tabs.
+    - A failed close does not fail the probe (the open is what was in question);
+      it is reported in `detail` so a leaked tab is traceable.
+    """
+    opened = run_with_deadline(
+        [sys.executable, str(BROWSER_CLI), "action=open", "targetUrl=" + BROWSER_OPEN_PROBE_URL],
+        BROWSER_OPEN_PROBE_DEADLINE_SECONDS)
+    if opened.status != "ok":
+        return PageOpenProbe(False, "open: " + outcome_summary(opened))
+    try:
+        payload = json.loads(opened.stdout)
+    except ValueError:
+        payload = None
+    target_id = payload.get("targetId") if isinstance(payload, dict) else None
+    if opened.returncode != 0 or not target_id:
+        error_text = payload.get("error") if isinstance(payload, dict) else None
+        text = str(error_text or opened.stdout.strip() or opened.stderr.strip() or "no output")
+        return PageOpenProbe(False, "open failed: " + text[-BROWSER_OPEN_PROBE_ERROR_MAX_CHARS:])
+    closed = run_with_deadline(
+        [sys.executable, str(BROWSER_CLI), "action=close", "targetId=" + str(target_id)],
+        BROWSER_HTTP_DEADLINE_SECONDS * 2)
+    close_note = "" if closed.succeeded else "; close of %s failed (%s)" % (target_id, outcome_summary(closed))
+    return PageOpenProbe(True, "opened and closed in %.1fs%s" % (opened.elapsed_seconds, close_note))

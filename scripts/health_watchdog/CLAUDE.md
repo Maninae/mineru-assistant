@@ -25,11 +25,12 @@ __main__.py            orchestrator: logging, pause guard, run order, deliver, p
    ├── system_probes.py     swap / memory_pressure / load / ncpu / disk / tccd cpu -> SystemSnapshot
    ├── tcc_probe.py         bounded sqlite3 read of a TCC-protected file -> ok | hung | error
    ├── landline_health.py   count "Claude silent for" lines in the daemon log window
-   ├── browser_hygiene.py   /health + /tabs, tab timestamps, renderer processes, `bin/browser action=stop`
+   ├── browser_hygiene.py   /health + /tabs, tab timestamps, renderer processes, `bin/browser action=stop`, about:blank page-open probe
    ├── orbstack_health.py   helper ps stats, `orb status` -> bounded `docker version`, `orb stop`/`orb start`
    ├── hung_jobs.py         SELECTOR (pure) + kill_job_trees (TERM, wait, KILL, wait)
    ├── evaluate.py          thresholds -> Finding (pure; streaks via state.bump_streak)
    ├── evaluate_orbstack.py OrbStack wedge / stuck-exit / restart decision (pure, same rules)
+   ├── evaluate_browser_open.py  page-open probe schedule + verdict (pure, same rules)
    ├── state.py             JSON state, cooldown + recovery decisions (pure)
    ├── alerting.py          message format, deliver-output.py --raw, bounded osascript fallback
    ├── findings.py          Finding / Severity
@@ -81,6 +82,9 @@ Tabs opened by interactive sessions may legitimately sit open for hours, overnig
 | Tabs whose `lastActivityAt` is older than `BROWSER_IDLE_TAB_DAYS` (7) | WARN listing up to 8 as `targetId · idle Nd · host…/path-tail`, ending in a reply hint | none (the user replies to close) | 24 h |
 | A renderer at or above 50% CPU for 3 runs | browser stopped | `bin/browser action=stop` | action, always reported |
 | Profile Chromium with no browser-server process, 2 runs | orphans terminated | TERM/KILL | action, always reported |
+| Server up, 0 tabs, and `bin/browser action=open targetUrl=about:blank` fails 2 probes in a row | CRITICAL "cannot open pages" with the error and the server's Python | none (fix text names the restart and `MINERU_BROWSER_PYTHON`) | 30 min, recovery line when it passes |
+
+`/health` stays 200 when the server's Python cannot import playwright, so it is not proof the browser works. The page-open probe runs every 30 min while passing and every run while failing, only when the server is up with 0 tabs (it never starts a server or sits beside a session's tabs), and closes its tab. It runs under `DRY_RUN` too.
 
 Each notice stays under ~12 lines and a tab appears in only one of them; URLs show the host and the last 40 chars of the path (no query string, which can carry tokens). Tab data comes from `/tabs` (`openedAt`, `lastActivityAt`, `openedBy`, `url`, ISO 8601 with offset). The browser server logs every tab close (`Closed tab ... (explicit close)` / `Tab ... closed by page`) in `logs/browser-server/server.log`, so a disappearing tab can be traced.
 

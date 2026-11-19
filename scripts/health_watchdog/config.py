@@ -105,6 +105,15 @@ BROWSER_TAB_SUMMARY_LIMIT = 8  # also caps each tab notice's list
 # ps table (a slow /health must never authorize a kill), and only after N runs.
 BROWSER_SERVER_COMMAND_MARKER = "/browser/server.py"
 BROWSER_ORPHAN_SUSTAINED_RUNS = 2
+# Real page-open probe: /health answers 200 even when the server's Python cannot
+# import playwright, so a live server is asked to open (and close) about:blank.
+# Only with 0 tabs (never alongside a session's tabs); every 30 min while passing,
+# every run while failing; alert after N failures in a row.
+BROWSER_OPEN_PROBE_URL = "about:blank"
+BROWSER_OPEN_PROBE_INTERVAL_SECONDS = 30 * 60
+BROWSER_OPEN_PROBE_DEADLINE_SECONDS = 60  # covers a cold Chromium launch
+BROWSER_OPEN_PROBE_SUSTAINED_RUNS = 2
+BROWSER_OPEN_PROBE_ERROR_MAX_CHARS = 200
 
 # OrbStack (the Docker/Linux VM). A VM whose memory got swapped out spins its helper
 # at 300-400% CPU doing no real work, and every `docker` call hangs. Any `docker` call

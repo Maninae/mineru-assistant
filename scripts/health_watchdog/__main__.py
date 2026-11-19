@@ -6,7 +6,8 @@ Run order matters: the cheap kernel-level reads (ps, launchctl, sysctl) go first
 so they are in hand even if the TCC probe hangs; the OrbStack probe (up to two 30 s
 deadlines, more during a restart) runs after the browser checks. The hung-job
 killer, the browser stop, orphan termination and the OrbStack restart are the only
-actions, all honoured by DRY_RUN; the single Telegram message goes out last. Exit code is 0 unless the run itself crashed.
+actions, all honoured by DRY_RUN (the page-open probe still runs: it opens and closes
+one about:blank tab, a read, not a repair); the single Telegram message goes out last. Exit code is 0 unless the run itself crashed.
 """
 
 import datetime as dt
@@ -22,6 +23,7 @@ from health_watchdog import (
     alerting,
     browser_hygiene,
     evaluate,
+    evaluate_browser_open,
     evaluate_orbstack,
     hung_jobs,
     landline_health,
@@ -126,6 +128,7 @@ def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
                         evaluate.evaluate_idle_tabs(browser, now.timestamp())):
         if tab_finding is not None:
             findings.append(tab_finding)
+    findings.extend(handle_page_open_probe(browser, table, state, now.timestamp()))
     stop_reason = evaluate.browser_needs_stop(browser, state)
     if stop_reason:
         outcome = browser_hygiene.stop_browser(DRY_RUN)
@@ -144,6 +147,18 @@ def collect_findings(state: dict, now: dt.datetime) -> List[Finding]:
 
     findings.extend(handle_orbstack(state, now.timestamp()))
     return findings
+
+
+def handle_page_open_probe(browser, table, state: dict, now_ts: float) -> List[Finding]:
+    """Open and close an about:blank tab when due; alert on sustained failure."""
+    if evaluate_browser_open.probe_is_due(browser, state, now_ts):
+        probe = browser_hygiene.probe_page_open()
+        evaluate_browser_open.record_probe(state, probe, now_ts)
+        logger.info("browser page-open probe: ok=%s (%s)", probe.ok, probe.detail)
+    servers = browser_hygiene.browser_server_processes(table)
+    server_python = servers[0].command.split()[0] if servers else None
+    finding = evaluate_browser_open.evaluate_page_open(state, server_python)
+    return [finding] if finding is not None else []
 
 
 def handle_orbstack(state: dict, now_ts: float) -> List[Finding]:

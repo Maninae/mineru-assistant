@@ -33,6 +33,7 @@ RECOVERED_TITLES = {
     "hung_jobs_survivor": "unkillable hung-job processes (gone now)",
     "orbstack": "OrbStack responsiveness",
     "orbstack_stuck_exit": "OrbStack helper stuck in exit (gone now)",
+    "browser_open": "stealth browser opens pages again",
 }
 CRASH_NOTE_MAX_CHARS = 300
 
