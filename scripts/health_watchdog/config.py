@@ -209,6 +209,7 @@ JOB_COMMAND_MARKERS = (
     "/scripts/sweep_group_members.py",
     "/scripts/build_contact_map.py",
     "/scripts/extract-cc-sessions.py",
+    "/scripts/export-journals.py",  # launched via run-pre-export-journals.sh, so not in its plist argv
 )
 # run_cc_job's prompt is "Read recurring/<job>.md and execute the job.", so a
 # headless `claude --print` carrying this marker is a scheduled CC job.
