@@ -2,6 +2,6 @@
 
 Export journals from Apple Notes before nightly consolidation.
 
-1. Execute: `/usr/bin/python3 {{MINERU_HOME}}/scripts/export-journals.py 30`
+1. launchd runs `{{MINERU_HOME}}/scripts/run-pre-export-journals.sh 30`, which wraps `export-journals.py` under `/usr/bin/python3` with a 10-min cap and a Telegram alert on failure.
 2. Output is logged by launchd to `logs/pre-export-journals/launchd-stdout.log`.
 3. Do NOT deliver via Telegram or any channel — this is infrastructure-only.
