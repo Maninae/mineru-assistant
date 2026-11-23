@@ -31,6 +31,8 @@ from health_watchdog.config import (
     LOAD_SUSTAINED_RUNS,
     MEMORY_FREE_CLEAR_PERCENT,
     MEMORY_FREE_CRITICAL_PERCENT,
+    MEMORY_FREE_SWAP_GATE_CLEAR_PERCENT,
+    MEMORY_FREE_SWAP_GATE_PERCENT,
     MEMORY_FREE_WARN_PERCENT,
     MEMORY_SUSTAINED_RUNS,
     OFFLOAD_VOLUME_HINT,
@@ -104,19 +106,32 @@ def evaluate_tccd_cpu(snapshot: SystemSnapshot, state: Dict[str, Any]) -> Option
 
 
 def evaluate_memory(snapshot: SystemSnapshot, state: Dict[str, Any], top_rss: List[str]) -> Optional[Finding]:
-    """Swap fraction and free-memory percent, latched with hysteresis and sustained.
+    """Free-memory percent, with swap counting only while free memory is tight.
 
-    The check turns on at the WARN bars, stays on until BOTH metrics are under their
-    CLEAR bars, and alerts only after MEMORY_SUSTAINED_RUNS consecutive latched runs.
+    - WARN: free <= MEMORY_FREE_WARN_PERCENT, or swap >= SWAP_USED_WARN_FRACTION while
+      free <= MEMORY_FREE_SWAP_GATE_PERCENT.
+    - CRITICAL: free <= MEMORY_FREE_CRITICAL_PERCENT, or swap >= SWAP_USED_CRITICAL_FRACTION
+      while free <= MEMORY_FREE_WARN_PERCENT.
+    - Latched until free is back above its CLEAR bar (the higher gate CLEAR bar unless swap
+      has dropped under SWAP_USED_CLEAR_FRACTION), then alerts only after
+      MEMORY_SUSTAINED_RUNS consecutive latched runs.
+    - Full swap with plenty of free RAM is leftover from an earlier busy moment, not pressure.
+    - If the free-memory probe failed (None), swap alone decides, on its own WARN/CLEAR bars.
     """
     swap = snapshot.swap_used_fraction
     free = snapshot.memory_free_percent
-    swap_bad = swap is not None and swap >= SWAP_USED_WARN_FRACTION
-    free_bad = free is not None and free <= MEMORY_FREE_WARN_PERCENT
-    critical = (swap is not None and swap >= SWAP_USED_CRITICAL_FRACTION) or (
-        free is not None and free <= MEMORY_FREE_CRITICAL_PERCENT)
-    clear = (swap is None or swap < SWAP_USED_CLEAR_FRACTION) and (free is None or free > MEMORY_FREE_CLEAR_PERCENT)
-    latched = hysteresis_flag(state, FLAG_MEMORY, swap_bad or free_bad, clear)
+    swap_high = swap is not None and swap >= SWAP_USED_WARN_FRACTION
+    swap_critical = swap is not None and swap >= SWAP_USED_CRITICAL_FRACTION
+    if free is None:
+        bad = swap_high
+        critical = swap_critical
+        clear = swap is None or swap < SWAP_USED_CLEAR_FRACTION
+    else:
+        bad = free <= MEMORY_FREE_WARN_PERCENT or (swap_high and free <= MEMORY_FREE_SWAP_GATE_PERCENT)
+        critical = free <= MEMORY_FREE_CRITICAL_PERCENT or (swap_critical and free <= MEMORY_FREE_WARN_PERCENT)
+        swap_settled = swap is None or swap < SWAP_USED_CLEAR_FRACTION
+        clear = free > MEMORY_FREE_CLEAR_PERCENT and (swap_settled or free > MEMORY_FREE_SWAP_GATE_CLEAR_PERCENT)
+    latched = hysteresis_flag(state, FLAG_MEMORY, bad, clear)
     streak = bump_streak(state, STREAK_MEMORY, latched)
     if not latched or streak < MEMORY_SUSTAINED_RUNS:
         return None

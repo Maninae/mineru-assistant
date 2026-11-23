@@ -61,16 +61,21 @@ KILL_KILL_GRACE_SECONDS = 5
 TCCD_CPU_WARN_PERCENT = 50.0
 TCCD_CPU_SUSTAINED_RUNS = 3
 
-# Memory: swap used fraction (sysctl vm.swapusage) and memory_pressure free %.
-# macOS grows swap on demand in 1 GB steps, so used/total sits near 70% in normal
-# operation and flaps across any single line; hence a sustained streak plus a
-# CLEAR bar well below the WARN bar (hysteresis) before the check is considered over.
+# Memory: memory_pressure free % is the signal; swap used fraction (sysctl vm.swapusage)
+# only counts while free memory is also getting tight.
+# - macOS never pages swap back in until the pages are touched, so swap stays near full
+#   for days after one busy moment while half the RAM sits free. Swap alone is not pressure.
+# - Each bar has a looser CLEAR bar (hysteresis) plus a sustained streak, so a metric
+#   sitting on a line does not flap.
 SWAP_USED_WARN_FRACTION = 0.80
-SWAP_USED_CLEAR_FRACTION = 0.70
+SWAP_USED_CLEAR_FRACTION = 0.70  # used only when the free-memory probe failed
 SWAP_USED_CRITICAL_FRACTION = 0.90
 MEMORY_FREE_WARN_PERCENT = 15
 MEMORY_FREE_CLEAR_PERCENT = 25
 MEMORY_FREE_CRITICAL_PERCENT = 5
+# High swap warns only at or below this free %, and releases only above the CLEAR bar.
+MEMORY_FREE_SWAP_GATE_PERCENT = 30
+MEMORY_FREE_SWAP_GATE_CLEAR_PERCENT = 40
 MEMORY_SUSTAINED_RUNS = 2
 
 # Load: 5-minute average divided by core count, sustained across runs, with the

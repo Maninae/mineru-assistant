@@ -64,17 +64,63 @@ def test_memory_incident_numbers_are_critical_with_top_rss_after_sustained_runs(
     assert finding.details == ["Top RSS: OrbStack Helper (pid 5) 8.5 GB"]
 
 
-def test_memory_hysteresis_holds_between_clear_and_warn_bars():
+def test_full_swap_with_plenty_of_free_memory_is_not_pressure():
+    """Leftover swap after a busy moment (81% used, half the RAM free) must stay silent."""
     state = default_state()
-    warn = snapshot(swap_used_mb=8300)        # 81%: above WARN
-    between = snapshot(swap_used_mb=7700)     # 75%: between CLEAR (70) and WARN (80)
-    clear = snapshot(swap_used_mb=7000)       # 68%: below CLEAR
+    leftover = SystemSnapshot(swap_total_mb=4096, swap_used_mb=3334, memory_free_percent=51)
+    for _ in range(config.MEMORY_SUSTAINED_RUNS * 3):
+        assert evaluate.evaluate_memory(leftover, state, []) is None
+    nearly_full = SystemSnapshot(swap_total_mb=4096, swap_used_mb=4000, memory_free_percent=45)
+    for _ in range(config.MEMORY_SUSTAINED_RUNS * 3):
+        assert evaluate.evaluate_memory(nearly_full, state, []) is None
+
+
+def test_high_swap_warns_only_while_free_memory_is_tight_and_releases_above_gate_clear_bar():
+    state = default_state()
+    tight = snapshot(swap_used_mb=8300, memory_free_percent=28)      # swap 81%, free under the 30 gate
+    between = snapshot(swap_used_mb=8300, memory_free_percent=35)    # between gate (30) and gate CLEAR (40)
+    clear = snapshot(swap_used_mb=8300, memory_free_percent=45)      # above gate CLEAR, swap still high
     for _ in range(config.MEMORY_SUSTAINED_RUNS):
-        finding = evaluate.evaluate_memory(warn, state, [])
+        finding = evaluate.evaluate_memory(tight, state, [])
     assert finding.severity == Severity.WARN
     assert evaluate.evaluate_memory(between, state, []).severity == Severity.WARN  # still latched
     assert evaluate.evaluate_memory(clear, state, []) is None
     assert evaluate.evaluate_memory(between, state, []) is None  # released, not re-latched
+
+
+def test_low_free_memory_warns_without_swap_and_holds_until_clear_bar():
+    state = default_state()
+    low = snapshot(memory_free_percent=14)       # under WARN (15), swap only 10%
+    between = snapshot(memory_free_percent=20)   # between WARN (15) and CLEAR (25)
+    clear = snapshot(memory_free_percent=26)
+    for _ in range(config.MEMORY_SUSTAINED_RUNS):
+        finding = evaluate.evaluate_memory(low, state, [])
+    assert finding.severity == Severity.WARN
+    assert evaluate.evaluate_memory(between, state, []).severity == Severity.WARN
+    assert evaluate.evaluate_memory(clear, state, []) is None
+
+
+def test_critical_swap_needs_low_free_memory_too():
+    state = default_state()
+    for _ in range(config.MEMORY_SUSTAINED_RUNS):
+        finding = evaluate.evaluate_memory(snapshot(swap_used_mb=9500, memory_free_percent=28), state, [])
+    assert finding.severity == Severity.WARN      # swap 93% but free 28%: WARN, not CRITICAL
+    assert evaluate.evaluate_memory(
+        snapshot(swap_used_mb=9500, memory_free_percent=12), state, []).severity == Severity.CRITICAL
+    assert evaluate.evaluate_memory(
+        snapshot(swap_used_mb=1024, memory_free_percent=4), state, []).severity == Severity.CRITICAL
+
+
+def test_swap_alone_decides_when_free_memory_probe_failed():
+    state = default_state()
+    warn = SystemSnapshot(swap_total_mb=10240, swap_used_mb=8300)       # 81%, free unknown
+    between = SystemSnapshot(swap_total_mb=10240, swap_used_mb=7700)    # 75%: between CLEAR (70) and WARN (80)
+    clear = SystemSnapshot(swap_total_mb=10240, swap_used_mb=7000)      # 68%
+    for _ in range(config.MEMORY_SUSTAINED_RUNS):
+        finding = evaluate.evaluate_memory(warn, state, [])
+    assert finding.severity == Severity.WARN
+    assert evaluate.evaluate_memory(between, state, []).severity == Severity.WARN
+    assert evaluate.evaluate_memory(clear, state, []) is None
     assert evaluate.evaluate_memory(SystemSnapshot(), state, []) is None
 
 
@@ -82,7 +128,7 @@ def test_swap_flapping_across_warn_line_sends_one_message():
     state = default_state()
     messages = 0
     for run, fraction in enumerate((0.79, 0.81, 0.79, 0.81, 0.79, 0.81)):
-        snap = SystemSnapshot(swap_total_mb=4096, swap_used_mb=4096 * fraction, memory_free_percent=60)
+        snap = SystemSnapshot(swap_total_mb=4096, swap_used_mb=4096 * fraction, memory_free_percent=28)
         finding = evaluate.evaluate_memory(snap, state, [])
         decision = decide_alerts([finding] if finding else [], state, NOW + run * 300)
         messages += 1 if (decision.to_send or decision.recovered) else 0
