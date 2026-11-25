@@ -194,9 +194,9 @@ If a unit is still blocked (it carried a chat-template token) and you have confi
 {{MINERU_HOME}}/bin/gog-firewall gmail thread modify <threadId> --remove UNREAD --no-input
 ```
 
-### WRITE — bulk mark-read recruiter threads (zsh)
+### WRITE — bulk mark-read every unread thread under a label (zsh)
 ```zsh
-ids=($({{MINERU_HOME}}/bin/gog-firewall gmail search "label:Recruiters is:unread" --max 500 --json | jq -r '.threads[].id'))
+ids=($({{MINERU_HOME}}/bin/gog-firewall gmail search "label:MyLabel is:unread" --max 500 --json | jq -r '.threads[].id'))
 for id in "${ids[@]}"; do
     {{MINERU_HOME}}/bin/gog-firewall gmail thread modify "$id" --remove UNREAD --no-input
 done
