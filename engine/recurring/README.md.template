@@ -16,6 +16,7 @@ This directory holds the instruction markdown files for every scheduled {{PERSON
 | Memory Description | 1:30 AM daily | `memory-description-maintenance.md` | `memory/` (in place) |
 | Inbox Triage | Sun 2:00 PM | `inbox-triage.md` | `briefs_inbox/` |
 | Daily Curiosity Question | 11:30 AM daily | `daily-curiosity-question.md` | `briefs_curiosity/` |
+| Curiosity, filing-only run | same 11:30 AM slot, only on days the backlog gate has paused questions and web-app answers are waiting | `curiosity-file-pending-answers.md` | none (stamps the answered question files) |
 | Memory Dedup | Sunday 10:30 PM (weekly) | `memory-dedup.md` | `briefs_dedup/` |
 | Model Watch | Saturday 9:00 AM (weekly) | `model-watch.md` | `briefs_model_watch/` |
 | Contacts & Groups Sweep | 11:00 PM daily | `group-members-sweep.md` (plain bash) | `briefs_imsg_group_members_updates/` |

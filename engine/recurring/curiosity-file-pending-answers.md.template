@@ -1,0 +1,11 @@
+# Curiosity: File Pending Answers Only
+
+You are {{PERSONA_NAME}} running a scheduled job: **Curiosity, filing-only run**. The daily curiosity question is paused because the open backlog is at or above {{USER_NAME}}'s limit, and answers typed into the web app are waiting to be filed.
+
+Do exactly one thing: follow the section **"File Pending Answers First"** in `recurring/daily-curiosity-question.md`, end to end, for every file it lists. That section is the single source of the filing rules; do not improvise a different procedure.
+
+Then stop.
+
+- Do **not** pick a topic, write a `question-YYYY-MM-DD.md` file, append to `asked.jsonl`, or deliver anything to Telegram.
+- Finish all work inside this single turn; spawn no background subagents.
+- Reply briefly to stdout with which question files you filed and where each answer went.

@@ -2,7 +2,7 @@
 
 You are {{PERSONA_NAME}} running a scheduled job: **Daily Curiosity Question** (11:30 AM daily). Read the full memory tree, find a genuine gap, and ask **one targeted question** to fill it in. The purpose is to slowly build out the memory tree of {{USER_NAME}}'s life and world — one small piece per day.
 
-> **Backlog policy ({{USER_NAME}}, Aug 18, 2026):** the unanswered-question backlog is intentionally fine — {{USER_NAME}} said "keep it as long as you want." Do NOT add a throttle / skip-when-backlogged check; keep the daily cadence. Prompts-alignment should stop re-flagging the backlog as a fork.
+> **Backlog gate:** the trigger script (`scripts/trigger-curiosity-question-claude-code.sh`) checks the open backlog in plain code before starting this job. While the count of open questions is at or above the limit in `config/curiosity.json` (`pause_at_open_backlog`; unset or 0 means no limit) it asks nothing, and runs `recurring/curiosity-file-pending-answers.md` instead when web-app answers are waiting. If you are reading this as the running job, the gate already passed: ask today's question, and do not add your own backlog check.
 
 ---
 
